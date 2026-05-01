@@ -22,6 +22,14 @@ function clipTitle(item: ClipboardTextItem): string {
   return item.preview.length > 64 ? `${item.preview.slice(0, 61).trimEnd()}...` : item.preview;
 }
 
+function filterClips(items: ClipboardTextItem[], query: string): ClipboardTextItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  return normalizedQuery
+    ? items.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
+    : items;
+}
+
 export function App() {
   const appInfo = window.copclip?.getAppInfo();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -52,12 +60,7 @@ export function App() {
     }
 
     return window.copclip.onClipboardHistoryChanged((items) => {
-      const normalizedQuery = query.trim().toLocaleLowerCase();
-      setClips(
-        normalizedQuery
-          ? items.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
-          : items
-      );
+      setClips(filterClips(items, query));
     });
   }, [query]);
 
@@ -66,12 +69,13 @@ export function App() {
       return undefined;
     }
 
-    return window.copclip.onClipboardPopupOpened(() => {
-      void loadHistory();
+    return window.copclip.onClipboardPopupOpened((items) => {
+      setClips(filterClips(items, query));
+      setIsLoadingHistory(false);
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, [loadHistory]);
+  }, [query]);
 
   useEffect(() => {
     setSelectedIndex((currentIndex) => {

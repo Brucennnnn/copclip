@@ -18,8 +18,8 @@ const copclip: CopClipApi = {
     };
   },
   onClipboardPopupOpened: (callback) => {
-    const listener = () => {
-      callback();
+    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
+      callback(items);
     };
 
     ipcRenderer.on("clipboard-popup:opened", listener);

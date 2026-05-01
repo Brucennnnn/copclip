@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
 import { exposedApiKeys } from "../src/preload/api";
@@ -31,7 +31,7 @@ function createClips(): ClipboardTextItem[] {
 }
 
 function installClipboardApi(clips = createClips()) {
-  let popupOpenedCallback: (() => void) | undefined;
+  let popupOpenedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
   let currentClips = clips;
   const api = {
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
@@ -43,12 +43,12 @@ function installClipboardApi(clips = createClips()) {
         : currentClips;
     }),
     onClipboardHistoryChanged: vi.fn(() => () => undefined),
-    onClipboardPopupOpened: vi.fn((callback: () => void) => {
+    onClipboardPopupOpened: vi.fn((callback: (items: ClipboardTextItem[]) => void) => {
       popupOpenedCallback = callback;
       return () => undefined;
     }),
     openPopup: () => {
-      popupOpenedCallback?.();
+      popupOpenedCallback?.(currentClips);
     },
     replaceClips: (nextClips: ClipboardTextItem[]) => {
       currentClips = nextClips;
@@ -191,7 +191,9 @@ describe("CopClip app shell", () => {
       }
     ]);
 
-    api.openPopup();
+    act(() => {
+      api.openPopup();
+    });
 
     await waitFor(() => {
       expect(screen.getByRole("button", {

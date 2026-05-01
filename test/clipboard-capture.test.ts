@@ -31,8 +31,9 @@ describe("clipboard capture", () => {
     } = await import("../src/main/clipboard-capture");
 
     startTextClipboardCapture();
-    captureCurrentClipboardText({ force: true });
+    const items = captureCurrentClipboardText({ force: true });
     stopTextClipboardCapture();
+    expect(items.map((item) => item.text)).toEqual(["already copied"]);
     expect(clipboardHistory.list().map((item) => item.text)).toEqual(["already copied"]);
   });
 

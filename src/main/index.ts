@@ -24,12 +24,12 @@ function openClipboardPopup(): void {
   const display = screen.getDisplayNearestPoint(cursor);
   const position = positionPopupNearCursor(cursor, display.workArea, popupSize);
 
-  captureCurrentClipboardText({ force: true });
+  const items = captureCurrentClipboardText({ force: true });
   popupWindow.setBounds({ ...position, ...popupSize });
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
-  popupWindow.webContents.send("clipboard-popup:opened");
+  popupWindow.webContents.send("clipboard-popup:opened", items);
 }
 
 function registerGlobalHotkey(): void {

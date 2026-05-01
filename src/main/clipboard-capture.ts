@@ -1,5 +1,5 @@
 import { BrowserWindow, clipboard, ipcMain } from "electron";
-import { createClipboardHistory } from "../shared/clipboard-history";
+import { createClipboardHistory, type ClipboardTextItem } from "../shared/clipboard-history";
 
 export const clipboardHistory = createClipboardHistory();
 
@@ -15,11 +15,11 @@ function broadcastClipboardHistoryChanged(): void {
   }
 }
 
-export function captureCurrentClipboardText(options: { force?: boolean } = {}): void {
+export function captureCurrentClipboardText(options: { force?: boolean } = {}): ClipboardTextItem[] {
   const nextText = clipboard.readText();
 
   if (!options.force && nextText === lastObservedText) {
-    return;
+    return clipboardHistory.list();
   }
 
   lastObservedText = nextText;
@@ -29,6 +29,8 @@ export function captureCurrentClipboardText(options: { force?: boolean } = {}): 
   if (captured) {
     broadcastClipboardHistoryChanged();
   }
+
+  return clipboardHistory.list();
 }
 
 export function registerClipboardHistoryIpc(): void {
