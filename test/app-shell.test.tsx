@@ -30,6 +30,7 @@ function createClips(): ClipboardTextItem[] {
 }
 
 function installClipboardApi(clips = createClips()) {
+  let popupOpenedCallback: (() => void) | undefined;
   const api = {
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
     dismissClipboardPopup: vi.fn(async () => undefined),
@@ -40,6 +41,13 @@ function installClipboardApi(clips = createClips()) {
         : clips;
     }),
     onClipboardHistoryChanged: vi.fn(() => () => undefined),
+    onClipboardPopupOpened: vi.fn((callback: () => void) => {
+      popupOpenedCallback = callback;
+      return () => undefined;
+    }),
+    openPopup: () => {
+      popupOpenedCallback?.();
+    },
     restoreClipboardItem: vi.fn(async () => true)
   };
 
@@ -63,6 +71,7 @@ describe("CopClip app shell", () => {
       "dismissClipboardPopup",
       "listClipboardHistory",
       "onClipboardHistoryChanged",
+      "onClipboardPopupOpened",
       "restoreClipboardItem"
     ]);
   });
@@ -154,5 +163,20 @@ describe("CopClip app shell", () => {
       expect(api.dismissClipboardPopup).toHaveBeenCalledOnce();
     });
     expect(api.restoreClipboardItem).not.toHaveBeenCalled();
+  });
+
+  it("focuses search when the clipboard popup opens", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    const search = screen.getByLabelText("Search clipboard history");
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    api.openPopup();
+
+    expect(search).toHaveFocus();
   });
 });

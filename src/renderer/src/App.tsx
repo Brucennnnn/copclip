@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClipboardTextItem } from "../../shared/clipboard-history";
 
 function formatClipAge(capturedAt: string): string {
@@ -24,6 +24,7 @@ function clipTitle(item: ClipboardTextItem): string {
 
 export function App() {
   const appInfo = window.copclip?.getAppInfo();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [clips, setClips] = useState<ClipboardTextItem[]>([]);
   const [query, setQuery] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
@@ -67,6 +68,17 @@ export function App() {
       );
     });
   }, [query]);
+
+  useEffect(() => {
+    if (!window.copclip) {
+      return undefined;
+    }
+
+    return window.copclip.onClipboardPopupOpened(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+  }, []);
 
   useEffect(() => {
     setSelectedIndex((currentIndex) => {
@@ -200,6 +212,7 @@ export function App() {
                 <input
                   aria-label="Search clipboard history"
                   placeholder="Search clipboard history"
+                  ref={searchInputRef}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />

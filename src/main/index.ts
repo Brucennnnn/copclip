@@ -1,18 +1,50 @@
 import { join } from "node:path";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, screen, shell } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
   registerClipboardHistoryIpc,
   startTextClipboardCapture,
   stopTextClipboardCapture
 } from "./clipboard-capture";
+import { positionPopupNearCursor } from "../shared/popup-position";
 
-function createMainWindow(): void {
-  const mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 900,
-    minHeight: 620,
+const popupSize = {
+  width: 900,
+  height: 620
+};
+
+let popupWindow: BrowserWindow | null = null;
+
+function openClipboardPopup(): void {
+  if (!popupWindow) {
+    return;
+  }
+
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const position = positionPopupNearCursor(cursor, display.workArea, popupSize);
+
+  popupWindow.setBounds({ ...position, ...popupSize });
+  popupWindow.setAlwaysOnTop(true, "floating");
+  popupWindow.show();
+  popupWindow.focus();
+  popupWindow.webContents.send("clipboard-popup:opened");
+}
+
+function registerGlobalHotkey(): void {
+  const registered = globalShortcut.register("CommandOrControl+Shift+V", openClipboardPopup);
+
+  if (!registered) {
+    console.warn("CopClip could not register Command+Shift+V global shortcut.");
+  }
+}
+
+function createClipboardPopupWindow(): BrowserWindow {
+  const window = new BrowserWindow({
+    width: popupSize.width,
+    height: popupSize.height,
+    minWidth: popupSize.width,
+    minHeight: popupSize.height,
     title: "CopClip",
     show: false,
     backgroundColor: "#fbfcfd",
@@ -24,31 +56,36 @@ function createMainWindow(): void {
     }
   });
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+  window.on("hide", () => {
+    window.setAlwaysOnTop(false);
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+    window.loadFile(join(__dirname, "../renderer/index.html"));
   }
+
+  return window;
 }
 
 app.whenReady().then(() => {
   registerClipboardHistoryIpc();
-  createMainWindow();
+  popupWindow = createClipboardPopupWindow();
+  registerGlobalHotkey();
   startTextClipboardCapture();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+    if (!popupWindow || popupWindow.isDestroyed()) {
+      popupWindow = createClipboardPopupWindow();
     }
+
+    openClipboardPopup();
   });
 });
 
@@ -59,5 +96,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  globalShortcut.unregisterAll();
   stopTextClipboardCapture();
 });

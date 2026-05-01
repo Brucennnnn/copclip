@@ -6,6 +6,7 @@ export type CopClipApi = {
   dismissClipboardPopup: () => Promise<void>;
   listClipboardHistory: (query?: string) => Promise<ClipboardTextItem[]>;
   onClipboardHistoryChanged: (callback: (items: ClipboardTextItem[]) => void) => () => void;
+  onClipboardPopupOpened: (callback: () => void) => () => void;
   restoreClipboardItem: (id: string) => Promise<boolean>;
 };
 
@@ -14,5 +15,6 @@ export const exposedApiKeys = [
   "dismissClipboardPopup",
   "listClipboardHistory",
   "onClipboardHistoryChanged",
+  "onClipboardPopupOpened",
   "restoreClipboardItem"
 ] as const;

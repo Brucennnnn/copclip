@@ -17,6 +17,16 @@ const copclip: CopClipApi = {
       ipcRenderer.removeListener("clipboard-history:changed", listener);
     };
   },
+  onClipboardPopupOpened: (callback) => {
+    const listener = () => {
+      callback();
+    };
+
+    ipcRenderer.on("clipboard-popup:opened", listener);
+    return () => {
+      ipcRenderer.removeListener("clipboard-popup:opened", listener);
+    };
+  },
   restoreClipboardItem: (id) => ipcRenderer.invoke("clipboard-history:restore", id)
 };
 
