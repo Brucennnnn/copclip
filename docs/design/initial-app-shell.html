@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CopClip Clipboard Manager Prototype</title>
+  <style>
+    :root {
+      --bg:      oklch(99% 0.002 240);
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(18% 0.012 250);
+      --muted:   oklch(54% 0.012 250);
+      --border:  oklch(92% 0.005 250);
+      --accent:  oklch(58% 0.18 255);
+      --accent-soft: oklch(96% 0.035 255);
+      --success: oklch(58% 0.14 150);
+      --warning: oklch(70% 0.14 75);
+      --danger: oklch(58% 0.17 25);
+
+      --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        linear-gradient(180deg, oklch(99% 0.002 240), oklch(97% 0.006 250));
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 44px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .stage {
+      width: min(1440px, 100%);
+      display: grid;
+      grid-template-columns: minmax(760px, 1fr) 390px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .desktop-shell,
+    .popover {
+      background: color-mix(in oklch, var(--surface) 94%, transparent);
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 60px color-mix(in oklch, var(--fg) 10%, transparent);
+      overflow: hidden;
+    }
+
+    .desktop-shell {
+      min-height: 780px;
+      border-radius: 22px;
+    }
+
+    .window-bar {
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 88%, var(--bg));
+    }
+
+    .traffic {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in oklch, var(--fg) 10%, transparent);
+    }
+
+    .dot.close { background: oklch(68% 0.18 25); }
+    .dot.min { background: oklch(78% 0.15 85); }
+    .dot.max { background: oklch(68% 0.16 145); }
+
+    .os-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .os-tabs span {
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+
+    .os-tabs .active {
+      color: var(--fg);
+      background: var(--accent-soft);
+    }
+
+    .window-title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: 226px minmax(340px, 1fr) 330px;
+      min-height: 730px;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+      background: color-mix(in oklch, var(--bg) 62%, var(--surface));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 8px 22px;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .brand strong {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav button,
+    .sidebar-action,
+    .chip,
+    .icon-button {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: default;
+    }
+
+    .nav button {
+      width: 100%;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      border-radius: 9px;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .nav button.active {
+      color: var(--fg);
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .nav-label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .glyph {
+      width: 18px;
+      height: 18px;
+      display: inline-grid;
+      place-items: center;
+      color: currentColor;
+    }
+
+    .count {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sidebar-section {
+      margin-top: 24px;
+      padding: 0 8px;
+    }
+
+    .section-label {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .shortcut-grid {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .shortcut-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    kbd {
+      min-width: 26px;
+      display: inline-flex;
+      justify-content: center;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-bottom-color: color-mix(in oklch, var(--border), var(--fg) 12%);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .privacy-card {
+      margin-top: 26px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+
+    .privacy-card strong {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .privacy-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--success);
+    }
+
+    .history {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      min-width: 0;
+    }
+
+    .history-top {
+      padding: 22px 22px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title-row,
+    .preview-title,
+    .popover-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 29px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 7px 0 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .search {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      border: 1px solid color-mix(in oklch, var(--accent) 36%, var(--border));
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 8%, transparent);
+    }
+
+    .search input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      color: var(--fg);
+      background: transparent;
+      font-size: 15px;
+    }
+
+    .search input::placeholder {
+      color: color-mix(in oklch, var(--muted), white 18%);
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--border);
+      overflow: auto;
+    }
+
+    .chip {
+      flex: 0 0 auto;
+      height: 30px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 13px;
+    }
+
+    .chip.active {
+      color: var(--fg);
+      background: var(--accent-soft);
+      border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+    }
+
+    .list {
+      display: grid;
+    }
+
+    .clip {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 13px;
+      align-items: start;
+      min-height: 92px;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .clip.selected {
+      background: color-mix(in oklch, var(--accent-soft) 70%, var(--surface));
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .clip-icon {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: var(--surface);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .clip-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .clip-title strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+
+    .clip p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pill {
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .preview {
+      padding: 22px;
+      background: color-mix(in oklch, var(--bg) 50%, var(--surface));
+    }
+
+    .preview-title h2,
+    .popover-title h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .preview-title span,
+    .popover-title span {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .preview-card {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+
+    .preview-card h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .code-block {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: oklch(98% 0.003 250);
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .action {
+      height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 620;
+    }
+
+    .action.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: white;
+    }
+
+    .detail-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .detail {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .detail strong {
+      color: var(--fg);
+      font-weight: 560;
+    }
+
+    .quick-start {
+      margin-top: 22px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+
+    .quick-start h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+
+    .steps {
+      margin: 0;
+      padding-left: 19px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .steps strong {
+      color: var(--fg);
+      font-weight: 560;
+    }
+
+    .popover-wrap {
+      padding-top: 78px;
+    }
+
+    .popover {
+      border-radius: 18px;
+      box-shadow: 0 20px 70px color-mix(in oklch, var(--fg) 14%, transparent);
+    }
+
+    .popover::before {
+      content: "";
+      position: relative;
+      top: -8px;
+      left: 302px;
+      display: block;
+      width: 16px;
+      height: 16px;
+      transform: rotate(45deg);
+      border-left: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .popover-inner {
+      margin-top: -16px;
+      padding: 15px;
+    }
+
+    .menu-strip {
+      height: 34px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .menu-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+
+    .popover-search {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 14px 0 10px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .mini-item {
+      display: grid;
+      grid-template-columns: 30px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 54px;
+      padding: 9px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+    }
+
+    .mini-item.active {
+      border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+      background: var(--accent-soft);
+    }
+
+    .mini-icon {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .mini-item strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .mini-item span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .popover-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 13px;
+      padding-top: 13px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .floating-note {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: color-mix(in oklch, var(--surface) 88%, transparent);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .floating-note strong {
+      color: var(--fg);
+    }
+
+    @media (max-width: 1220px) {
+      body {
+        padding: 24px;
+      }
+
+      .stage {
+        grid-template-columns: 1fr;
+      }
+
+      .popover-wrap {
+        padding-top: 0;
+        width: min(390px, 100%);
+        justify-self: center;
+      }
+    }
+
+    @media (max-width: 860px) {
+      body {
+        padding: 14px;
+      }
+
+      .desktop-shell {
+        min-height: auto;
+        border-radius: 18px;
+      }
+
+      .window-title,
+      .preview {
+        display: none;
+      }
+
+      .app-grid {
+        grid-template-columns: 86px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        padding: 14px 8px;
+      }
+
+      .brand {
+        justify-content: center;
+        padding: 0 0 18px;
+      }
+
+      .brand-text,
+      .nav button .count,
+      .nav button span:not(.glyph),
+      .sidebar-section,
+      .privacy-card {
+        display: none;
+      }
+
+      .nav button {
+        justify-content: center;
+        padding: 0;
+      }
+
+      .history-top,
+      .filters,
+      .clip {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" aria-label="CopClip desktop app prototype">
+    <section class="desktop-shell" data-od-id="main-window">
+      <div class="window-bar">
+        <div class="traffic" aria-label="macOS window controls">
+          <span class="dot close"></span>
+          <span class="dot min"></span>
+          <span class="dot max"></span>
+        </div>
+        <div class="window-title">CopClip - Clipboard History</div>
+        <div class="os-tabs" aria-label="Supported operating systems">
+          <span class="active">macOS</span>
+          <span>Windows</span>
+        </div>
+      </div>
+
+      <div class="app-grid">
+        <aside class="sidebar" aria-label="CopClip navigation">
+          <div class="brand">
+            <div class="mark">C</div>
+            <div class="brand-text">
+              <strong>CopClip</strong>
+              <span>Clipboard, organized</span>
+            </div>
+          </div>
+
+          <nav class="nav">
+            <button class="active" type="button">
+              <span class="nav-label"><span class="glyph">H</span><span>History</span></span>
+              <span class="count">248</span>
+            </button>
+            <button type="button">
+              <span class="nav-label"><span class="glyph">P</span><span>Pinned</span></span>
+              <span class="count">12</span>
+            </button>
+            <button type="button">
+              <span class="nav-label"><span class="glyph">L</span><span>Links</span></span>
+              <span class="count">34</span>
+            </button>
+            <button type="button">
+              <span class="nav-label"><span class="glyph">Aa</span><span>Text</span></span>
+              <span class="count">181</span>
+            </button>
+            <button type="button">
+              <span class="nav-label"><span class="glyph">I</span><span>Images</span></span>
+              <span class="count">21</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section">
+            <p class="section-label">Quick keys</p>
+            <div class="shortcut-grid">
+              <div class="shortcut-row"><span>Open CopClip</span><span><kbd>Cmd</kbd> <kbd>Shift</kbd> <kbd>V</kbd></span></div>
+              <div class="shortcut-row"><span>Paste plain text</span><span><kbd>Cmd</kbd> <kbd>B</kbd></span></div>
+              <div class="shortcut-row"><span>Pin item</span><span><kbd>P</kbd></span></div>
+            </div>
+          </div>
+
+          <div class="privacy-card">
+            <strong><span class="status-dot"></span>Private by default</strong>
+            <p>Passwords and one-time codes are ignored automatically. History stays on this device unless sync is turned on.</p>
+          </div>
+        </aside>
+
+        <section class="history" aria-label="Clipboard history">
+          <div class="history-top">
+            <div class="title-row">
+              <h1 data-od-id="headline">Clipboard history</h1>
+              <span class="meta">Today - 18 copied</span>
+            </div>
+            <p class="subtitle">Search, preview, pin, and paste recent copies without learning a complicated workflow.</p>
+            <label class="search" data-od-id="search">
+              <span class="glyph">/</span>
+              <input value="github token setup" aria-label="Search clipboard history">
+              <kbd>Cmd K</kbd>
+            </label>
+          </div>
+
+          <div class="filters" data-od-id="filters">
+            <button class="chip active" type="button">All</button>
+            <button class="chip" type="button">Text</button>
+            <button class="chip" type="button">Links</button>
+            <button class="chip" type="button">Images</button>
+            <button class="chip" type="button">Pinned</button>
+            <button class="chip" type="button">Hidden apps</button>
+          </div>
+
+          <div class="list" data-od-id="history-list">
+            <article class="clip selected">
+              <div class="clip-icon">TXT</div>
+              <div>
+                <div class="clip-title">
+                  <strong>GitHub token setup command</strong>
+                  <span class="pill">Pinned</span>
+                </div>
+                <p>export GITHUB_TOKEN=hidden && gh auth status</p>
+              </div>
+              <span class="meta">2m</span>
+            </article>
+
+            <article class="clip">
+              <div class="clip-icon">URL</div>
+              <div>
+                <div class="clip-title"><strong>CopClip onboarding checklist</strong></div>
+                <p>https://copclip.app/docs/get-started</p>
+              </div>
+              <span class="meta">9m</span>
+            </article>
+
+            <article class="clip">
+              <div class="clip-icon">IMG</div>
+              <div>
+                <div class="clip-title"><strong>Screenshot - permissions dialog</strong></div>
+                <p>1,920 x 1,080 PNG copied from Preview</p>
+              </div>
+              <span class="meta">17m</span>
+            </article>
+
+            <article class="clip">
+              <div class="clip-icon">Aa</div>
+              <div>
+                <div class="clip-title"><strong>Customer support reply</strong></div>
+                <p>Thanks for trying CopClip. You can pause capture from the menu bar anytime.</p>
+              </div>
+              <span class="meta">31m</span>
+            </article>
+
+            <article class="clip">
+              <div class="clip-icon">#</div>
+              <div>
+                <div class="clip-title"><strong>Design token notes</strong></div>
+                <p>--radius: 12px; --accent: oklch(58% 0.18 255); --surface: white;</p>
+              </div>
+              <span class="meta">42m</span>
+            </article>
+          </div>
+        </section>
+
+        <aside class="preview" aria-label="Clipboard item preview" data-od-id="preview-panel">
+          <div class="preview-title">
+            <h2>Preview</h2>
+            <span>Text - 106 bytes</span>
+          </div>
+
+          <div class="preview-card">
+            <h3>GitHub token setup command</h3>
+            <div class="code-block">export GITHUB_TOKEN=hidden
+gh auth status
+gh repo clone copclip/desktop</div>
+            <div class="action-row">
+              <button class="action primary" type="button">Paste now</button>
+              <button class="action" type="button">Copy plain</button>
+            </div>
+          </div>
+
+          <div class="detail-list">
+            <div class="detail"><span>Captured from</span><strong>Terminal</strong></div>
+            <div class="detail"><span>Available on</span><strong>macOS + Windows</strong></div>
+            <div class="detail"><span>Retention</span><strong>30 days</strong></div>
+            <div class="detail"><span>Sync</span><strong>Off</strong></div>
+          </div>
+
+          <div class="quick-start">
+            <h3>First-run setup</h3>
+            <ol class="steps">
+              <li><strong>Allow clipboard access</strong> when the OS asks.</li>
+              <li><strong>Open with shortcut</strong> from any app.</li>
+              <li><strong>Pin useful clips</strong> so they never expire.</li>
+            </ol>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <aside class="popover-wrap" aria-label="Menu bar and system tray popover">
+      <div class="menu-strip">
+        <span class="menu-pill">macOS menu bar</span>
+        <span class="menu-pill">Windows tray</span>
+      </div>
+
+      <section class="popover" data-od-id="popover">
+        <div class="popover-inner">
+          <div class="popover-title">
+            <h2>CopClip</h2>
+            <span>Cmd Shift V / Ctrl Shift V</span>
+          </div>
+
+          <div class="popover-search">
+            <span class="glyph">/</span>
+            <span>Search copied text, links, images</span>
+          </div>
+
+          <div class="mini-list">
+            <article class="mini-item active">
+              <div class="mini-icon">TXT</div>
+              <div>
+                <strong>GitHub token setup command</strong>
+                <span>Paste - copied 2m ago</span>
+              </div>
+              <kbd>Enter</kbd>
+            </article>
+            <article class="mini-item">
+              <div class="mini-icon">URL</div>
+              <div>
+                <strong>CopClip onboarding checklist</strong>
+                <span>Open link - copied 9m ago</span>
+              </div>
+              <kbd>2</kbd>
+            </article>
+            <article class="mini-item">
+              <div class="mini-icon">IMG</div>
+              <div>
+                <strong>Screenshot - permissions dialog</strong>
+                <span>Preview image - copied 17m ago</span>
+              </div>
+              <kbd>3</kbd>
+            </article>
+            <article class="mini-item">
+              <div class="mini-icon">Aa</div>
+              <div>
+                <strong>Customer support reply</strong>
+                <span>Paste as plain text</span>
+              </div>
+              <kbd>4</kbd>
+            </article>
+          </div>
+
+          <div class="popover-footer">
+            <span><span class="status-dot"></span> Capture on</span>
+            <span>Settings</span>
+          </div>
+        </div>
+      </section>
+
+      <p class="floating-note"><strong>Friendly first impression:</strong> CopClip starts with one shortcut, plain language, and clear privacy state, so new users can paste from history without configuring anything first.</p>
+    </aside>
+  </main>
+</body>
+</html>
