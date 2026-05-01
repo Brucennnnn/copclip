@@ -32,14 +32,15 @@ function createClips(): ClipboardTextItem[] {
 
 function installClipboardApi(clips = createClips()) {
   let popupOpenedCallback: (() => void) | undefined;
+  let currentClips = clips;
   const api = {
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
     dismissClipboardPopup: vi.fn(async () => undefined),
     listClipboardHistory: vi.fn(async (query = "") => {
       const normalizedQuery = query.toLocaleLowerCase();
       return normalizedQuery
-        ? clips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
-        : clips;
+        ? currentClips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
+        : currentClips;
     }),
     onClipboardHistoryChanged: vi.fn(() => () => undefined),
     onClipboardPopupOpened: vi.fn((callback: () => void) => {
@@ -48,6 +49,9 @@ function installClipboardApi(clips = createClips()) {
     }),
     openPopup: () => {
       popupOpenedCallback?.();
+    },
+    replaceClips: (nextClips: ClipboardTextItem[]) => {
+      currentClips = nextClips;
     },
     restoreClipboardItem: vi.fn(async () => true)
   };
@@ -173,7 +177,7 @@ describe("CopClip app shell", () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Close clipboard popup"));
+    fireEvent.mouseDown(screen.getByLabelText("Close clipboard popup"));
 
     await waitFor(() => {
       expect(api.dismissClipboardPopup).toHaveBeenCalledOnce();
@@ -181,7 +185,7 @@ describe("CopClip app shell", () => {
     expect(api.restoreClipboardItem).not.toHaveBeenCalled();
   });
 
-  it("focuses search when the clipboard popup opens", async () => {
+  it("refreshes history and focuses search when the clipboard popup opens", async () => {
     const api = installClipboardApi();
 
     render(<App />);
@@ -190,9 +194,23 @@ describe("CopClip app shell", () => {
     await screen.findByRole("button", {
       name: /Restore clipboard item 1: Release checklist/
     });
+    api.replaceClips([
+      {
+        id: "clip-3",
+        type: "text",
+        text: "Copied while hidden",
+        preview: "Copied while hidden",
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 13)).toISOString()
+      }
+    ]);
 
     api.openPopup();
 
-    expect(search).toHaveFocus();
+    await waitFor(() => {
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: Copied while hidden/
+      })).toBeInTheDocument();
+      expect(search).toHaveFocus();
+    });
   });
 });

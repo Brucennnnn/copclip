@@ -30,29 +30,21 @@ export function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadHistory() {
-      if (!window.copclip) {
-        setIsLoadingHistory(false);
-        return;
-      }
-
-      const items = await window.copclip.listClipboardHistory(query);
-
-      if (isMounted) {
-        setClips(items);
-        setIsLoadingHistory(false);
-      }
+  const loadHistory = useCallback(async () => {
+    if (!window.copclip) {
+      setIsLoadingHistory(false);
+      return;
     }
 
-    void loadHistory();
+    const items = await window.copclip.listClipboardHistory(query);
 
-    return () => {
-      isMounted = false;
-    };
+    setClips(items);
+    setIsLoadingHistory(false);
   }, [query]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   useEffect(() => {
     if (!window.copclip) {
@@ -75,10 +67,11 @@ export function App() {
     }
 
     return window.copclip.onClipboardPopupOpened(() => {
+      void loadHistory();
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, []);
+  }, [loadHistory]);
 
   useEffect(() => {
     setSelectedIndex((currentIndex) => {
@@ -169,6 +162,10 @@ export function App() {
                 aria-label="Close clipboard popup"
                 className="close-button"
                 onClick={dismissPopup}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  dismissPopup();
+                }}
                 title="Close"
                 type="button"
               >
