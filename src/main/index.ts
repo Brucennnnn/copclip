@@ -61,6 +61,10 @@ function createClipboardPopupWindow(): BrowserWindow {
     window.setAlwaysOnTop(false);
   });
 
+  window.on("blur", () => {
+    window.hide();
+  });
+
   window.on("closed", () => {
     if (popupWindow === window) {
       popupWindow = null;
