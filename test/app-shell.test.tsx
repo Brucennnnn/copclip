@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
 import { exposedApiKeys } from "../src/preload/api";
 import type { ClipboardTextItem } from "../src/shared/clipboard-history";
 
 afterEach(() => {
+  cleanup();
   delete window.copclip;
 });
 

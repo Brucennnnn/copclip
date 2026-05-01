@@ -6,6 +6,7 @@ import {
   startTextClipboardCapture,
   stopTextClipboardCapture
 } from "./clipboard-capture";
+import { ensureLiveWindow } from "./popup-window-state";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
 const popupSize = {
@@ -16,9 +17,7 @@ const popupSize = {
 let popupWindow: BrowserWindow | null = null;
 
 function openClipboardPopup(): void {
-  if (!popupWindow) {
-    return;
-  }
+  popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
@@ -60,6 +59,12 @@ function createClipboardPopupWindow(): BrowserWindow {
     window.setAlwaysOnTop(false);
   });
 
+  window.on("closed", () => {
+    if (popupWindow === window) {
+      popupWindow = null;
+    }
+  });
+
   window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -81,10 +86,7 @@ app.whenReady().then(() => {
   startTextClipboardCapture();
 
   app.on("activate", () => {
-    if (!popupWindow || popupWindow.isDestroyed()) {
-      popupWindow = createClipboardPopupWindow();
-    }
-
+    popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
     openClipboardPopup();
   });
 });
