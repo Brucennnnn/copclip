@@ -79,8 +79,13 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}) {
     return items.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery));
   }
 
+  function findById(id: string): ClipboardTextItem | undefined {
+    return items.find((item) => item.id === id);
+  }
+
   return {
     captureText,
+    findById,
     list
   };
 }

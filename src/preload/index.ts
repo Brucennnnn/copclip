@@ -5,6 +5,7 @@ import type { CopClipApi } from "./api";
 
 const copclip: CopClipApi = {
   getAppInfo: () => appInfo,
+  dismissClipboardPopup: () => ipcRenderer.invoke("clipboard-popup:dismiss"),
   listClipboardHistory: (query) => ipcRenderer.invoke("clipboard-history:list", query),
   onClipboardHistoryChanged: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
@@ -15,7 +16,8 @@ const copclip: CopClipApi = {
     return () => {
       ipcRenderer.removeListener("clipboard-history:changed", listener);
     };
-  }
+  },
+  restoreClipboardItem: (id) => ipcRenderer.invoke("clipboard-history:restore", id)
 };
 
 contextBridge.exposeInMainWorld("copclip", copclip);

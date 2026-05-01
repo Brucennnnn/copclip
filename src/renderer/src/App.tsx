@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClipboardTextItem } from "../../shared/clipboard-history";
 
 function formatClipAge(capturedAt: string): string {
@@ -27,6 +27,7 @@ export function App() {
   const [clips, setClips] = useState<ClipboardTextItem[]>([]);
   const [query, setQuery] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,6 +67,71 @@ export function App() {
       );
     });
   }, [query]);
+
+  useEffect(() => {
+    setSelectedIndex((currentIndex) => {
+      if (clips.length === 0) {
+        return 0;
+      }
+
+      return Math.min(Math.max(currentIndex, 0), clips.length - 1);
+    });
+  }, [clips.length]);
+
+  const restoreClip = useCallback(async (clip: ClipboardTextItem | undefined) => {
+    if (!clip || !window.copclip) {
+      return;
+    }
+
+    await window.copclip.restoreClipboardItem(clip.id);
+  }, []);
+
+  useEffect(() => {
+    function handlePopupKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void window.copclip?.dismissClipboardPopup();
+        return;
+      }
+
+      if (clips.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSelectedIndex((currentIndex) => Math.min(currentIndex + 1, clips.length - 1));
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSelectedIndex((currentIndex) => Math.max(currentIndex - 1, 0));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void restoreClip(clips[selectedIndex]);
+        return;
+      }
+
+      if (/^[1-9]$/.test(event.key)) {
+        const shortcutIndex = Number(event.key) - 1;
+
+        if (shortcutIndex < clips.length) {
+          event.preventDefault();
+          setSelectedIndex(shortcutIndex);
+          void restoreClip(clips[shortcutIndex]);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handlePopupKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handlePopupKeyDown);
+    };
+  }, [clips, restoreClip, selectedIndex]);
 
   const statusText = useMemo(() => {
     if (isLoadingHistory) {
@@ -149,17 +215,26 @@ export function App() {
             </div>
 
             <div className="list" aria-label="Clipboard history results">
-              {clips.map((clip) => (
-                <article className="clip" key={clip.id}>
+              {clips.map((clip, index) => (
+                <button
+                  aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
+                  aria-selected={index === selectedIndex}
+                  className={`clip${index === selectedIndex ? " selected" : ""}`}
+                  key={clip.id}
+                  onClick={() => void restoreClip(clip)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  type="button"
+                >
                   <div className="clip-icon">TXT</div>
                   <div>
                     <div className="clip-title">
+                      <span className="shortcut">{index + 1}</span>
                       <strong>{clipTitle(clip)}</strong>
                     </div>
                     <p>{clip.preview}</p>
                   </div>
                   <span className="meta">{formatClipAge(clip.capturedAt)}</span>
-                </article>
+                </button>
               ))}
               {clips.length === 0 ? (
                 <div className="empty-state" role="status">

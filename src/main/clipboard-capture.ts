@@ -19,6 +19,23 @@ export function registerClipboardHistoryIpc(): void {
   ipcMain.handle("clipboard-history:list", (_event, query?: string) => {
     return clipboardHistory.list(query);
   });
+
+  ipcMain.handle("clipboard-history:restore", (event, id: string) => {
+    const item = clipboardHistory.findById(id);
+
+    if (!item) {
+      return false;
+    }
+
+    clipboard.writeText(item.text);
+    lastObservedText = item.text;
+    BrowserWindow.fromWebContents(event.sender)?.hide();
+    return true;
+  });
+
+  ipcMain.handle("clipboard-popup:dismiss", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.hide();
+  });
 }
 
 export function startTextClipboardCapture(intervalMs = 750): void {

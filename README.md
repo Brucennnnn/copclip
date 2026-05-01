@@ -1,6 +1,6 @@
 # CopClip
 
-CopClip is a lightweight Electron clipboard manager for macOS. The current implementation includes the Electron, TypeScript, preload, and renderer foundation plus the first text clipboard-history slice.
+CopClip is a lightweight Electron clipboard manager for macOS. The current implementation includes the Electron, TypeScript, preload, and renderer foundation plus text clipboard history capture and restore.
 
 ## Development
 
@@ -36,8 +36,9 @@ The scaffold includes:
 - A secure preload bridge that exposes app info and typed clipboard-history read/subscribe APIs.
 - Main-process text clipboard polling while the app is running.
 - In-memory text history with empty-item filtering, deduplication, most-recent ordering, truncated previews, and search filtering.
-- A React renderer shell with live clipboard history search and settings placeholder surfaces.
+- A React renderer shell with live clipboard history search, mouse selection, keyboard selection, and settings placeholder surfaces.
+- Restore-to-clipboard actions for clicked items, arrow/Enter selection, number shortcuts, and Escape dismissal.
 - Styling based on `docs/design/initial-app-shell.html`.
-- Vitest coverage for the public app shell, exposed preload API contract, text history, deduplication, and search behavior.
+- Vitest coverage for the public app shell, exposed preload API contract, text history, deduplication, search behavior, restore selection, and dismissal.
 
-The app intentionally does not include SQLite history, restore-to-clipboard selection, global hotkeys, cursor-positioned popup behavior, menu bar controls, or packaging yet. Those are tracked by follow-up issues.
+The app intentionally does not include SQLite history, global hotkeys, cursor-positioned popup behavior, menu bar controls, or packaging yet. Those are tracked by follow-up issues.

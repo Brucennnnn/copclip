@@ -8,6 +8,45 @@ afterEach(() => {
   delete window.copclip;
 });
 
+function createClips(): ClipboardTextItem[] {
+  const capturedAt = new Date(Date.UTC(2026, 4, 1, 12)).toISOString();
+
+  return [
+    {
+      id: "clip-1",
+      type: "text",
+      text: "Release checklist",
+      preview: "Release checklist",
+      capturedAt
+    },
+    {
+      id: "clip-2",
+      type: "text",
+      text: "GitHub issue link",
+      preview: "GitHub issue link",
+      capturedAt
+    }
+  ];
+}
+
+function installClipboardApi(clips = createClips()) {
+  const api = {
+    getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
+    dismissClipboardPopup: vi.fn(async () => undefined),
+    listClipboardHistory: vi.fn(async (query = "") => {
+      const normalizedQuery = query.toLocaleLowerCase();
+      return normalizedQuery
+        ? clips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
+        : clips;
+    }),
+    onClipboardHistoryChanged: vi.fn(() => () => undefined),
+    restoreClipboardItem: vi.fn(async () => true)
+  };
+
+  window.copclip = api;
+  return api;
+}
+
 describe("CopClip app shell", () => {
   it("shows the clipboard popup and settings placeholders", () => {
     render(<App />);
@@ -21,40 +60,15 @@ describe("CopClip app shell", () => {
   it("documents the intentionally exposed preload API surface", () => {
     expect(exposedApiKeys).toEqual([
       "getAppInfo",
+      "dismissClipboardPopup",
       "listClipboardHistory",
-      "onClipboardHistoryChanged"
+      "onClipboardHistoryChanged",
+      "restoreClipboardItem"
     ]);
   });
 
   it("filters visible text clipboard history as the user types", async () => {
-    const capturedAt = new Date(Date.UTC(2026, 4, 1, 12)).toISOString();
-    const clips: ClipboardTextItem[] = [
-      {
-        id: "clip-1",
-        type: "text",
-        text: "Release checklist",
-        preview: "Release checklist",
-        capturedAt
-      },
-      {
-        id: "clip-2",
-        type: "text",
-        text: "GitHub issue link",
-        preview: "GitHub issue link",
-        capturedAt
-      }
-    ];
-
-    window.copclip = {
-      getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" }),
-      listClipboardHistory: vi.fn(async (query = "") => {
-        const normalizedQuery = query.toLocaleLowerCase();
-        return normalizedQuery
-          ? clips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
-          : clips;
-      }),
-      onClipboardHistoryChanged: vi.fn(() => () => undefined)
-    };
+    installClipboardApi();
 
     render(<App />);
 
@@ -72,5 +86,73 @@ describe("CopClip app shell", () => {
       expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
       expect(screen.getAllByText("GitHub issue link").length).toBeGreaterThan(0);
     });
+  });
+
+  it("restores a clicked visible text clipboard item", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    const releaseItem = await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    fireEvent.click(releaseItem);
+
+    await waitFor(() => {
+      expect(api.restoreClipboardItem).toHaveBeenCalledWith("clip-1");
+    });
+  });
+
+  it("moves selection with arrows and restores the selected item with Enter", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    const githubItem = await screen.findByRole("button", {
+      name: /Restore clipboard item 2: GitHub issue link/
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(githubItem).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(api.restoreClipboardItem).toHaveBeenCalledWith("clip-2");
+    });
+  });
+
+  it("restores visible results with number shortcuts", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 2: GitHub issue link/
+    });
+
+    fireEvent.keyDown(window, { key: "2" });
+
+    await waitFor(() => {
+      expect(api.restoreClipboardItem).toHaveBeenCalledWith("clip-2");
+    });
+  });
+
+  it("dismisses the popup with Escape without restoring clipboard text", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(api.dismissClipboardPopup).toHaveBeenCalledOnce();
+    });
+    expect(api.restoreClipboardItem).not.toHaveBeenCalled();
   });
 });
