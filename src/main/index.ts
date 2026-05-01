@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, globalShortcut, screen, shell } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
+  captureCurrentClipboardText,
   registerClipboardHistoryIpc,
   startTextClipboardCapture,
   stopTextClipboardCapture
@@ -23,6 +24,7 @@ function openClipboardPopup(): void {
   const display = screen.getDisplayNearestPoint(cursor);
   const position = positionPopupNearCursor(cursor, display.workArea, popupSize);
 
+  captureCurrentClipboardText({ force: true });
   popupWindow.setBounds({ ...position, ...popupSize });
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();

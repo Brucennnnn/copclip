@@ -15,6 +15,22 @@ function broadcastClipboardHistoryChanged(): void {
   }
 }
 
+export function captureCurrentClipboardText(options: { force?: boolean } = {}): void {
+  const nextText = clipboard.readText();
+
+  if (!options.force && nextText === lastObservedText) {
+    return;
+  }
+
+  lastObservedText = nextText;
+
+  const captured = clipboardHistory.captureText(nextText);
+
+  if (captured) {
+    broadcastClipboardHistoryChanged();
+  }
+}
+
 export function registerClipboardHistoryIpc(): void {
   ipcMain.handle("clipboard-history:list", (_event, query?: string) => {
     return clipboardHistory.list(query);
@@ -45,21 +61,7 @@ export function startTextClipboardCapture(intervalMs = 750): void {
 
   lastObservedText = clipboard.readText();
 
-  clipboardPollTimer = setInterval(() => {
-    const nextText = clipboard.readText();
-
-    if (nextText === lastObservedText) {
-      return;
-    }
-
-    lastObservedText = nextText;
-
-    const captured = clipboardHistory.captureText(nextText);
-
-    if (captured) {
-      broadcastClipboardHistoryChanged();
-    }
-  }, intervalMs);
+  clipboardPollTimer = setInterval(captureCurrentClipboardText, intervalMs);
 }
 
 export function stopTextClipboardCapture(): void {

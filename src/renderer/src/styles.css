@@ -54,7 +54,6 @@ input {
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in oklch, var(--surface) 92%, var(--bg));
-  -webkit-app-region: drag;
 }
 
 .title-row {
@@ -69,7 +68,6 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  -webkit-app-region: no-drag;
 }
 
 h1 {
@@ -117,7 +115,6 @@ h1 {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 8%, transparent);
-  -webkit-app-region: no-drag;
 }
 
 .search input {
