@@ -154,119 +154,53 @@ export function App() {
   }, [clips.length, isLoadingHistory]);
 
   return (
-    <main className="stage" aria-label="CopClip app shell">
-      <section className="desktop-shell" aria-label="Main CopClip window">
-        <div className="window-bar">
-          <div className="traffic" aria-label="macOS window controls">
-            <span className="dot close" />
-            <span className="dot min" />
-            <span className="dot max" />
+    <main className="popup-stage" aria-label="CopClip clipboard popup">
+      <section className="clipboard-popup" aria-label="Clipboard popup">
+        <div className="history-top">
+          <div className="title-row">
+            <h1>Clipboard history</h1>
+            <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
           </div>
-          <div className="window-title">CopClip - Clipboard History</div>
-          <div className="os-tabs" aria-label="Supported operating system">
-            <span className="active">macOS</span>
-          </div>
+          <label className="search">
+            <span aria-hidden="true">/</span>
+            <input
+              aria-label="Search clipboard history"
+              placeholder="Search copied text"
+              ref={searchInputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <kbd>Esc</kbd>
+          </label>
         </div>
 
-        <div className="app-grid">
-          <aside className="sidebar" aria-label="CopClip navigation">
-            <div className="brand">
-              <div className="mark">C</div>
-              <div className="brand-text">
-                <strong>CopClip</strong>
-                <span>Clipboard, organized</span>
-              </div>
-            </div>
-
-            <nav className="nav" aria-label="Primary">
-              <button className="active" type="button">
-                <span>History</span>
-                <span className="count">{clips.length}</span>
-              </button>
-              <button type="button">
-                <span>Pinned</span>
-                <span className="count">0</span>
-              </button>
-              <button type="button">
-                <span>Settings</span>
-              </button>
-            </nav>
-
-            <div className="privacy-card">
-              <strong>
-                <span className="status-dot" /> Private by default
-              </strong>
-              <p>Text history stays in this running app for now. Persistent storage arrives in a later slice.</p>
-            </div>
-          </aside>
-
-          <section className="history" aria-label="Clipboard popup placeholder">
-            <div className="history-top">
-              <div className="title-row">
-                <h1>Clipboard history</h1>
-                <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : "App shell"}</span>
-              </div>
-              <p className="subtitle">Copied text appears here while CopClip is running.</p>
-              <label className="search">
-                <span aria-hidden="true">/</span>
-                <input
-                  aria-label="Search clipboard history"
-                  placeholder="Search clipboard history"
-                  ref={searchInputRef}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-                <kbd>Cmd K</kbd>
-              </label>
-            </div>
-
-            <div className="filters" aria-label="Clipboard filters">
-              <button className="chip active" type="button">All</button>
-              <button className="chip" type="button">Text</button>
-              <button className="chip" type="button">Links</button>
-              <button className="chip" type="button">Images</button>
-            </div>
-
-            <div className="list" aria-label="Clipboard history results">
-              {clips.map((clip, index) => (
-                <button
-                  aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
-                  aria-selected={index === selectedIndex}
-                  className={`clip${index === selectedIndex ? " selected" : ""}`}
-                  key={clip.id}
-                  onClick={() => void restoreClip(clip)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  type="button"
-                >
-                  <div className="clip-icon">TXT</div>
-                  <div>
-                    <div className="clip-title">
-                      <span className="shortcut">{index + 1}</span>
-                      <strong>{clipTitle(clip)}</strong>
-                    </div>
-                    <p>{clip.preview}</p>
-                  </div>
-                  <span className="meta">{formatClipAge(clip.capturedAt)}</span>
-                </button>
-              ))}
-              {clips.length === 0 ? (
-                <div className="empty-state" role="status">
-                  {query ? "No matching text clips" : statusText === "Loading" ? "Loading history" : "Copy text to start history"}
+        <div className="list" aria-label="Clipboard history results">
+          {clips.map((clip, index) => (
+            <button
+              aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
+              aria-selected={index === selectedIndex}
+              className={`clip${index === selectedIndex ? " selected" : ""}`}
+              key={clip.id}
+              onClick={() => void restoreClip(clip)}
+              onMouseEnter={() => setSelectedIndex(index)}
+              type="button"
+            >
+              <div className="clip-icon">TXT</div>
+              <div>
+                <div className="clip-title">
+                  <span className="shortcut">{index + 1}</span>
+                  <strong>{clipTitle(clip)}</strong>
                 </div>
-              ) : null}
+                <p>{clip.preview}</p>
+              </div>
+              <span className="meta">{formatClipAge(clip.capturedAt)}</span>
+            </button>
+          ))}
+          {clips.length === 0 ? (
+            <div className="empty-state" role="status">
+              {query ? "No matching text clips" : statusText === "Loading" ? "Loading history" : "Copy text to start history"}
             </div>
-          </section>
-
-          <aside className="settings" aria-label="Settings placeholder">
-            <div className="preview-title">
-              <h2>Settings</h2>
-              <span>Placeholder</span>
-            </div>
-            <div className="preview-card">
-              <h3>Ready for preferences</h3>
-              <p>Hotkey, history limit, popup size, and theme controls will be implemented in a later issue.</p>
-            </div>
-          </aside>
+          ) : null}
         </div>
       </section>
     </main>

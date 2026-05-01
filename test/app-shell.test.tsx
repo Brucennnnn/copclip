@@ -57,13 +57,14 @@ function installClipboardApi(clips = createClips()) {
 }
 
 describe("CopClip app shell", () => {
-  it("shows the clipboard popup and settings placeholders", () => {
+  it("shows the compact clipboard popup without the full window shell", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: "Clipboard history" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Clipboard popup placeholder")).toBeInTheDocument();
+    expect(screen.getByLabelText("Clipboard popup")).toBeInTheDocument();
     expect(screen.getByLabelText("Search clipboard history")).toBeEnabled();
+    expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("CopClip navigation")).not.toBeInTheDocument();
   });
 
   it("documents the intentionally exposed preload API surface", () => {

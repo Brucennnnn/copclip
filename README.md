@@ -37,7 +37,7 @@ The scaffold includes:
 - Main-process text clipboard polling while the app is running.
 - `Command+Shift+V` global shortcut registration for opening the popup while CopClip is running in the background.
 - In-memory text history with empty-item filtering, deduplication, most-recent ordering, truncated previews, and search filtering.
-- A React renderer shell with live clipboard history search, mouse selection, keyboard selection, and settings placeholder surfaces.
+- A compact React clipboard popup with live history search, mouse selection, and keyboard selection.
 - Restore-to-clipboard actions for clicked items, arrow/Enter selection, number shortcuts, and Escape dismissal.
 - Cursor-aware popup positioning constrained to the active display work area, with the popup above other windows while visible.
 - Styling based on `docs/design/initial-app-shell.html`.

@@ -10,7 +10,7 @@ import { ensureLiveWindow } from "./popup-window-state";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
 const popupSize = {
-  width: 900,
+  width: 560,
   height: 620
 };
 
@@ -46,6 +46,8 @@ function createClipboardPopupWindow(): BrowserWindow {
     minHeight: popupSize.height,
     title: "CopClip",
     show: false,
+    frame: false,
+    resizable: false,
     backgroundColor: "#fbfcfd",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
