@@ -98,11 +98,15 @@ export function App() {
     await window.copclip.restoreClipboardItem(clip.id);
   }, []);
 
+  const dismissPopup = useCallback(() => {
+    void window.copclip?.dismissClipboardPopup();
+  }, []);
+
   useEffect(() => {
     function handlePopupKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        void window.copclip?.dismissClipboardPopup();
+        dismissPopup();
         return;
       }
 
@@ -143,7 +147,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", handlePopupKeyDown);
     };
-  }, [clips, restoreClip, selectedIndex]);
+  }, [clips, dismissPopup, restoreClip, selectedIndex]);
 
   const statusText = useMemo(() => {
     if (isLoadingHistory) {
@@ -159,7 +163,18 @@ export function App() {
         <div className="history-top">
           <div className="title-row">
             <h1>Clipboard history</h1>
-            <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
+            <div className="title-actions">
+              <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
+              <button
+                aria-label="Close clipboard popup"
+                className="close-button"
+                onClick={dismissPopup}
+                title="Close"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
           </div>
           <label className="search">
             <span aria-hidden="true">/</span>
