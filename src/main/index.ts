@@ -1,6 +1,11 @@
 import { join } from "node:path";
 import { app, BrowserWindow, shell } from "electron";
 import { is } from "@electron-toolkit/utils";
+import {
+  registerClipboardHistoryIpc,
+  startTextClipboardCapture,
+  stopTextClipboardCapture
+} from "./clipboard-capture";
 
 function createMainWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -36,7 +41,9 @@ function createMainWindow(): void {
 }
 
 app.whenReady().then(() => {
+  registerClipboardHistoryIpc();
   createMainWindow();
+  startTextClipboardCapture();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -49,4 +56,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  stopTextClipboardCapture();
 });
