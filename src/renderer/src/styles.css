@@ -64,12 +64,6 @@ input {
   margin-bottom: 14px;
 }
 
-.title-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 h1 {
   margin: 0;
   font-family: var(--font-display);
@@ -82,27 +76,6 @@ h1 {
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-
-.close-button {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.close-button:hover,
-.close-button:focus-visible {
-  color: var(--fg);
-  background: var(--accent-soft);
-  outline: none;
 }
 
 .search {

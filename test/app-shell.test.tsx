@@ -66,8 +66,8 @@ describe("CopClip app shell", () => {
 
     expect(screen.getByRole("heading", { name: "Clipboard history" })).toBeInTheDocument();
     expect(screen.getByLabelText("Clipboard popup")).toBeInTheDocument();
-    expect(screen.getByLabelText("Close clipboard popup")).toBeEnabled();
     expect(screen.getByLabelText("Search clipboard history")).toBeEnabled();
+    expect(screen.queryByLabelText("Close clipboard popup")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("CopClip navigation")).not.toBeInTheDocument();
   });
@@ -165,19 +165,6 @@ describe("CopClip app shell", () => {
     });
 
     fireEvent.keyDown(window, { key: "Escape" });
-
-    await waitFor(() => {
-      expect(api.dismissClipboardPopup).toHaveBeenCalledOnce();
-    });
-    expect(api.restoreClipboardItem).not.toHaveBeenCalled();
-  });
-
-  it("dismisses the popup with the close button without restoring clipboard text", async () => {
-    const api = installClipboardApi();
-
-    render(<App />);
-
-    fireEvent.mouseDown(screen.getByLabelText("Close clipboard popup"));
 
     await waitFor(() => {
       expect(api.dismissClipboardPopup).toHaveBeenCalledOnce();

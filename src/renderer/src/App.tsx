@@ -156,22 +156,7 @@ export function App() {
         <div className="history-top">
           <div className="title-row">
             <h1>Clipboard history</h1>
-            <div className="title-actions">
-              <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
-              <button
-                aria-label="Close clipboard popup"
-                className="close-button"
-                onClick={dismissPopup}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  dismissPopup();
-                }}
-                title="Close"
-                type="button"
-              >
-                ×
-              </button>
-            </div>
+            <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
           </div>
           <label className="search">
             <span aria-hidden="true">/</span>
