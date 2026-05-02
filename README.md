@@ -47,8 +47,9 @@ The scaffold includes:
 - A main desktop shell with History, Settings, Privacy, and Advanced sections for configuration and future management workflows.
 - A compact React clipboard popup with live history search, mouse selection, and keyboard selection.
 - Restore-to-clipboard actions for clicked items, arrow/Enter selection, number shortcuts, and Escape dismissal.
+- A menu bar item with Open Popup, Open Desktop Shell, Pause or Resume Capture, Clear History, Settings, About & Privacy, Hide Dock Icon, and Quit commands.
 - Cursor-aware popup positioning constrained to the active display work area, with the popup above other windows while visible.
 - Styling based on `docs/design/initial-app-shell.html`.
 - Vitest coverage for the desktop shell, quick popup, exposed preload API contract, text history, deduplication, search behavior, restore selection, dismissal, search focus, and deterministic popup positioning.
 
-The app intentionally does not include menu bar controls or packaging yet. Those are tracked by follow-up issues.
+The app intentionally does not include packaging yet. That is tracked by a follow-up issue.

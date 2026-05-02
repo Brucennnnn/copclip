@@ -89,6 +89,7 @@ export function createSqliteClipboardHistory(
     ORDER BY pinned DESC, captured_at DESC
   `);
   const pinStatement = database.prepare("UPDATE clipboard_items SET pinned = 1 WHERE id = ?");
+  const clearStatement = database.prepare("DELETE FROM clipboard_items");
   const pruneStatement = database.prepare(`
     DELETE FROM clipboard_items
     WHERE id IN (
@@ -155,8 +156,13 @@ export function createSqliteClipboardHistory(
     return result.changes > 0;
   }
 
+  function clear(): void {
+    clearStatement.run();
+  }
+
   return {
     captureText,
+    clear,
     close: () => database.close(),
     findById,
     list,

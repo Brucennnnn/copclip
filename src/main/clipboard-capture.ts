@@ -39,6 +39,14 @@ function sendClipboardHistoryChanged(items: ClipboardTextItem[]): void {
   });
 }
 
+export function clearClipboardHistory(): ClipboardTextItem[] {
+  clipboardHistory.clear();
+  const items = clipboardHistory.list();
+  sendClipboardHistoryChanged(items);
+  debugLog("capture", "cleared clipboard history");
+  return items;
+}
+
 export function captureCurrentClipboardText(options: { force?: boolean } = {}): ClipboardTextItem[] {
   const nextText = clipboard.readText();
   const unchanged = nextText === lastObservedText;

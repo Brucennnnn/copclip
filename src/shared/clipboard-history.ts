@@ -8,6 +8,7 @@ export type ClipboardTextItem = {
 
 export type ClipboardHistory = {
   captureText: (text: string) => ClipboardTextItem | null;
+  clear: () => void;
   findById: (id: string) => ClipboardTextItem | undefined;
   list: (query?: string) => ClipboardTextItem[];
   close?: () => void;
@@ -91,8 +92,13 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
     return items.find((item) => item.id === id);
   }
 
+  function clear(): void {
+    items.length = 0;
+  }
+
   return {
     captureText,
+    clear,
     findById,
     list
   };

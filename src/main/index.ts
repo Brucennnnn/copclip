@@ -1,16 +1,18 @@
 import { join } from "node:path";
-import { app, BrowserWindow, globalShortcut, screen, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
   captureCurrentClipboardText,
   closeClipboardHistory,
   configureClipboardHistory,
+  clearClipboardHistory,
   registerClipboardHistoryIpc,
   sendToLiveWindow,
   startTextClipboardCapture,
   stopTextClipboardCapture
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
+import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
@@ -28,6 +30,9 @@ const popupSize = {
 
 let desktopWindow: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null;
+let menuBarTray: Tray | null = null;
+let capturePaused = false;
+let dockHidden = false;
 
 function showDesktopShell(): void {
   debugLog("desktop", "show requested");
@@ -35,6 +40,11 @@ function showDesktopShell(): void {
 
   desktopWindow.show();
   desktopWindow.focus();
+}
+
+function showDesktopShellSection(section: "settings" | "privacy"): void {
+  showDesktopShell();
+  desktopWindow?.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(section)}`);
 }
 
 function openClipboardPopup(): void {
@@ -68,6 +78,76 @@ function registerGlobalHotkey(): void {
   if (!registered) {
     console.warn("CopClip could not register Command+Shift+V global shortcut.");
   }
+}
+
+function createTrayIcon() {
+  return nativeImage.createFromDataURL(
+    `data:image/svg+xml,${encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+        <rect x="3" y="2" width="12" height="14" rx="3" fill="black"/>
+        <rect x="6" y="5" width="6" height="1.5" rx="0.75" fill="white"/>
+        <rect x="6" y="8" width="6" height="1.5" rx="0.75" fill="white"/>
+        <rect x="6" y="11" width="4" height="1.5" rx="0.75" fill="white"/>
+      </svg>
+    `)}`
+  );
+}
+
+function refreshMenuBarMenu(): void {
+  if (!menuBarTray) {
+    return;
+  }
+
+  const menu = Menu.buildFromTemplate(
+    buildMenuBarTemplate(
+      {
+        capturePaused,
+        dockHidden
+      },
+      {
+        clearHistory: () => {
+          clearClipboardHistory();
+        },
+        hideDock: () => {
+          app.dock?.hide();
+          dockHidden = true;
+        },
+        openDesktopShell: showDesktopShell,
+        openPopup: openClipboardPopup,
+        pauseCapture: () => {
+          stopTextClipboardCapture();
+          capturePaused = true;
+        },
+        quit: () => {
+          app.quit();
+        },
+        resumeCapture: () => {
+          startTextClipboardCapture();
+          capturePaused = false;
+        },
+        showDock: () => {
+          app.dock?.show();
+          dockHidden = false;
+        },
+        showPrivacy: () => {
+          showDesktopShellSection("privacy");
+        },
+        showSettings: () => {
+          showDesktopShellSection("settings");
+        }
+      },
+      refreshMenuBarMenu
+    )
+  );
+
+  menuBarTray.setContextMenu(menu);
+}
+
+function createMenuBarController(): void {
+  menuBarTray = new Tray(createTrayIcon());
+  menuBarTray.setToolTip("CopClip");
+  menuBarTray.setTitle("CopClip");
+  refreshMenuBarMenu();
 }
 
 function loadRendererSurface(window: BrowserWindow, surface: RendererSurface): void {
@@ -188,6 +268,7 @@ app.whenReady().then(() => {
   registerClipboardHistoryIpc();
   desktopWindow = createDesktopShellWindow();
   popupWindow = createClipboardPopupWindow();
+  createMenuBarController();
   registerGlobalHotkey();
   startTextClipboardCapture();
   showDesktopShell();
@@ -205,6 +286,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   globalShortcut.unregisterAll();
+  menuBarTray?.destroy();
+  menuBarTray = null;
   stopTextClipboardCapture();
   closeClipboardHistory();
 });

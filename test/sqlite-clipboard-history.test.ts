@@ -90,6 +90,17 @@ describe("sqlite clipboard text history", () => {
     history.close?.();
   });
 
+  it("clears all stored history", () => {
+    const history = createSqliteClipboardHistory(createDatabasePath());
+
+    history.captureText("Release checklist");
+    history.captureText("GitHub issue");
+    history.clear();
+
+    expect(history.list()).toEqual([]);
+    history.close?.();
+  });
+
   it("prunes old unpinned items while preserving pinned items", () => {
     let second = 0;
     const history = createSqliteClipboardHistory(createDatabasePath(), {

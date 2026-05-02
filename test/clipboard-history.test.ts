@@ -49,6 +49,16 @@ describe("clipboard text history", () => {
     expect(history.list("CLIP").map((item) => item.text)).toEqual(["Clipboard manager"]);
   });
 
+  it("clears all text history", () => {
+    const history = createClipboardHistory();
+
+    history.captureText("Release checklist");
+    history.captureText("GitHub issue");
+    history.clear();
+
+    expect(history.list()).toEqual([]);
+  });
+
   it("creates readable single-line truncated previews", () => {
     expect(previewText("one\n\n two\tthree", 20)).toBe("one two three");
     expect(previewText("This is a long clipboard entry", 15)).toBe("This is a lo...");
