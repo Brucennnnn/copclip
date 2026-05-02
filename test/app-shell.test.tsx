@@ -135,6 +135,9 @@ describe("CopClip app shell", () => {
     const githubItem = await screen.findByRole("button", {
       name: /Restore clipboard item 2: GitHub issue link/
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
     await waitFor(() => {
@@ -160,6 +163,9 @@ describe("CopClip app shell", () => {
       expect(screen.getByRole("button", {
         name: /Restore clipboard item 1: Release checklist/
       })).toHaveAttribute("aria-selected", "true");
+    });
+    await act(async () => {
+      await Promise.resolve();
     });
 
     fireEvent.keyDown(window, { key: "2" });

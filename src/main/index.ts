@@ -14,8 +14,8 @@ import { preloadScriptPath } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
 const popupSize = {
-  width: 560,
-  height: 620
+  width: 400,
+  height: 500
 };
 
 let popupWindow: BrowserWindow | null = null;
