@@ -31,6 +31,16 @@ function createClips(): ClipboardTextItem[] {
   ];
 }
 
+function createManyClips(): ClipboardTextItem[] {
+  return Array.from({ length: 5 }, (_, index) => ({
+    id: `clip-${index + 1}`,
+    type: "text" as const,
+    text: `Recent clip ${index + 1}`,
+    preview: `Recent clip ${index + 1}`,
+    capturedAt: new Date(Date.UTC(2026, 4, 1, 12, index)).toISOString()
+  }));
+}
+
 function installClipboardApi(clips = createClips()) {
   let popupOpenedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
   let historyChangedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
@@ -86,6 +96,22 @@ describe("CopClip app shell", () => {
     await waitFor(() => {
       expect(screen.getByText("2 text clips")).toBeInTheDocument();
       expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("limits the desktop recent text clips list to the three latest clips", async () => {
+    installClipboardApi(createManyClips());
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("3 shown")).toBeInTheDocument();
+      expect(screen.getAllByText("Recent clip 1").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recent clip 2").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recent clip 3").length).toBeGreaterThan(0);
+      expect(screen.queryAllByText("Recent clip 4")).toHaveLength(0);
+      expect(screen.queryAllByText("Recent clip 5")).toHaveLength(0);
     });
   });
 

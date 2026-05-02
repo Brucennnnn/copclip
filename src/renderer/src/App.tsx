@@ -64,7 +64,7 @@ function DesktopShell() {
     });
   }, []);
 
-  const recentClips = clips.slice(0, 5);
+  const recentClips = clips.slice(0, 3);
 
   return (
     <main className="desktop-shell" aria-label="CopClip desktop shell">
