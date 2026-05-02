@@ -16,10 +16,11 @@ Run the app in development mode:
 npm run dev
 ```
 
-If Electron reports a native `better-sqlite3` module version mismatch after installing dependencies, rebuild the SQLite binding for the Electron runtime:
+The development and test scripts rebuild the native SQLite binding for the runtime they are about to use. If you need to do that manually:
 
 ```sh
 npm run rebuild:sqlite:electron
+npm run rebuild:sqlite:node
 ```
 
 Run tests:
