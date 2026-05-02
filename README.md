@@ -16,6 +16,12 @@ Run the app in development mode:
 npm run dev
 ```
 
+If Electron reports a native `better-sqlite3` module version mismatch after installing dependencies, rebuild the SQLite binding for the Electron runtime:
+
+```sh
+npm run rebuild:sqlite:electron
+```
+
 Run tests:
 
 ```sh
@@ -36,7 +42,7 @@ The scaffold includes:
 - A secure preload bridge that exposes app info and typed clipboard-history read/subscribe APIs.
 - Main-process text clipboard polling while the app is running.
 - `Command+Shift+V` global shortcut registration for opening the popup while CopClip is running in the background.
-- In-memory text history with empty-item filtering, deduplication, most-recent ordering, truncated previews, and search filtering.
+- SQLite-backed text history with empty-item filtering, deduplication, most-recent ordering, truncated previews, search filtering, and pruning.
 - A main desktop shell with History, Settings, Privacy, and Advanced sections for configuration and future management workflows.
 - A compact React clipboard popup with live history search, mouse selection, and keyboard selection.
 - Restore-to-clipboard actions for clicked items, arrow/Enter selection, number shortcuts, and Escape dismissal.
@@ -44,4 +50,4 @@ The scaffold includes:
 - Styling based on `docs/design/initial-app-shell.html`.
 - Vitest coverage for the desktop shell, quick popup, exposed preload API contract, text history, deduplication, search behavior, restore selection, dismissal, search focus, and deterministic popup positioning.
 
-The app intentionally does not include SQLite history, menu bar controls, or packaging yet. Those are tracked by follow-up issues.
+The app intentionally does not include menu bar controls or packaging yet. Those are tracked by follow-up issues.

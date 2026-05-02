@@ -1,11 +1,20 @@
 import { BrowserWindow, clipboard, ipcMain } from "electron";
-import { createClipboardHistory, type ClipboardTextItem } from "../shared/clipboard-history";
+import { createClipboardHistory, type ClipboardHistory, type ClipboardTextItem } from "../shared/clipboard-history";
 import { debugLog, textSummary } from "./debug-log";
 
-export const clipboardHistory = createClipboardHistory();
+export let clipboardHistory: ClipboardHistory = createClipboardHistory();
 
 let clipboardPollTimer: NodeJS.Timeout | null = null;
 let lastObservedText = "";
+
+export function configureClipboardHistory(nextClipboardHistory: ClipboardHistory): void {
+  clipboardHistory.close?.();
+  clipboardHistory = nextClipboardHistory;
+}
+
+export function closeClipboardHistory(): void {
+  clipboardHistory.close?.();
+}
 
 export function sendToLiveWindow(window: BrowserWindow, channel: string, ...args: unknown[]): boolean {
   try {

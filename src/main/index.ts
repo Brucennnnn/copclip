@@ -3,6 +3,8 @@ import { app, BrowserWindow, globalShortcut, screen, shell } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
   captureCurrentClipboardText,
+  closeClipboardHistory,
+  configureClipboardHistory,
   registerClipboardHistoryIpc,
   sendToLiveWindow,
   startTextClipboardCapture,
@@ -10,6 +12,7 @@ import {
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
 import { ensureLiveWindow } from "./popup-window-state";
+import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
@@ -181,6 +184,7 @@ function createClipboardPopupWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   debugLog("app", "ready");
+  configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite")));
   registerClipboardHistoryIpc();
   desktopWindow = createDesktopShellWindow();
   popupWindow = createClipboardPopupWindow();
@@ -202,4 +206,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   stopTextClipboardCapture();
+  closeClipboardHistory();
 });

@@ -6,6 +6,14 @@ export type ClipboardTextItem = {
   capturedAt: string;
 };
 
+export type ClipboardHistory = {
+  captureText: (text: string) => ClipboardTextItem | null;
+  findById: (id: string) => ClipboardTextItem | undefined;
+  list: (query?: string) => ClipboardTextItem[];
+  close?: () => void;
+  pinItem?: (id: string) => boolean;
+};
+
 type ClipboardHistoryOptions = {
   now?: () => Date;
   createId?: () => string;
@@ -29,7 +37,7 @@ export function previewText(text: string, maxLength = defaultPreviewLength): str
   return `${singleLine.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
-export function createClipboardHistory(options: ClipboardHistoryOptions = {}) {
+export function createClipboardHistory(options: ClipboardHistoryOptions = {}): ClipboardHistory {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? (() => crypto.randomUUID());
   const previewLength = options.previewLength ?? defaultPreviewLength;

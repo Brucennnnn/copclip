@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:debug": "COPCLIP_DEBUG=1 electron-vite dev",
+    "rebuild:sqlite:electron": "npm rebuild better-sqlite3 --runtime=electron --target=33.2.1 --disturl=https://electronjs.org/headers",
     "build": "tsc --noEmit && electron-vite build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,6 +17,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^3.0.0",
+    "better-sqlite3": "^12.9.0",
     "electron-store": "^10.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
