@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"osascript -e 'tell application \\\"System Events\\\" to keystroke \\\"v\\\" using {command down, shift down}'\",\"description\":\"Simulate Cmd+Shift+V hotkey\"}",
+  "error": "Exit code 1\n36:82: execution error: System Events got an error: osascript is not allowed to send keystrokes. (1002)",
+  "timestamp": "2026-05-02T08:48:20.768Z",
+  "retry_count": 1
+}

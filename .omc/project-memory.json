@@ -1,0 +1,175 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777710840552,
+  "projectRoot": "/Users/pakinnuntasukkasem/work/project/copclip",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.0.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.4.11",
+        "category": "build"
+      },
+      {
+        "name": "vitest",
+        "version": "2.1.8",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "electron-vite dev",
+      "build": "tsc --noEmit && electron-vite build",
+      "test": "vitest run",
+      "test:watch": "vitest",
+      "typecheck": "tsc --noEmit"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": "*.test.ts",
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src",
+      "test"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 0,
+      "lastAccessed": 1777710840447,
+      "keyFiles": []
+    },
+    "out": {
+      "path": "out",
+      "purpose": "Build output",
+      "fileCount": 0,
+      "lastAccessed": 1777710840447,
+      "keyFiles": []
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1777710840503,
+      "keyFiles": []
+    },
+    "test": {
+      "path": "test",
+      "purpose": "Test files",
+      "fileCount": 7,
+      "lastAccessed": 1777710840504,
+      "keyFiles": [
+        "app-shell.test.tsx",
+        "clipboard-capture.test.ts",
+        "clipboard-history.test.ts",
+        "popup-position.test.ts",
+        "popup-window-state.test.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/main/clipboard-capture.ts",
+      "accessCount": 3,
+      "lastAccessed": 1777711378472,
+      "type": "file"
+    },
+    {
+      "path": "src/renderer/src/App.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1777711458991,
+      "type": "file"
+    },
+    {
+      "path": "src/main/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1777711842637,
+      "type": "file"
+    },
+    {
+      "path": "src/preload/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777711358276,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1777710862853,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1777710862914,
+      "type": "file"
+    },
+    {
+      "path": "test/clipboard-capture.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1777711026693,
+      "type": "file"
+    },
+    {
+      "path": "src/shared/clipboard-history.ts",
+      "accessCount": 1,
+      "lastAccessed": 1777711057228,
+      "type": "file"
+    },
+    {
+      "path": "src/preload/api.ts",
+      "accessCount": 1,
+      "lastAccessed": 1777711078043,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
