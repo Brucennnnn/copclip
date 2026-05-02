@@ -38,11 +38,33 @@ function currentSurface(): "desktop" | "popup" {
 
 type SettingsErrors = SettingsUpdateResult["errors"];
 
+type SettingsDraft = {
+  globalHotkey: string;
+  historyLimit: string;
+  popupSize: {
+    width: string;
+    height: string;
+  };
+  theme: CopClipSettings["theme"];
+};
+
+function createSettingsDraft(settings: CopClipSettings): SettingsDraft {
+  return {
+    globalHotkey: settings.globalHotkey,
+    historyLimit: String(settings.historyLimit),
+    popupSize: {
+      width: String(settings.popupSize.width),
+      height: String(settings.popupSize.height)
+    },
+    theme: settings.theme
+  };
+}
+
 function DesktopShell({ settings }: { settings: CopClipSettings }) {
   const appInfo = window.copclip?.getAppInfo();
   const [clips, setClips] = useState<ClipboardTextItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
-  const [draftSettings, setDraftSettings] = useState(settings);
+  const [draftSettings, setDraftSettings] = useState(() => createSettingsDraft(settings));
   const [settingsErrors, setSettingsErrors] = useState<SettingsErrors>({});
   const [settingsStatus, setSettingsStatus] = useState("");
 
@@ -74,7 +96,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
   const recentClips = clips.slice(0, 3);
 
   useEffect(() => {
-    setDraftSettings(settings);
+    setDraftSettings(createSettingsDraft(settings));
   }, [settings]);
 
   const updateSettings = useCallback(async (patch: CopClipSettingsPatch) => {
@@ -87,7 +109,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
     setSettingsStatus(result.ok ? "Saved" : "Check values");
 
     if (result.ok) {
-      setDraftSettings(result.settings);
+      setDraftSettings(createSettingsDraft(result.settings));
     }
   }, []);
 
@@ -164,7 +186,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
                   value={draftSettings.historyLimit}
                   onBlur={() => void updateSettings({ historyLimit: draftSettings.historyLimit })}
                   onChange={(event) =>
-                    setDraftSettings((current) => ({ ...current, historyLimit: Number(event.target.value) }))
+                    setDraftSettings((current) => ({ ...current, historyLimit: event.target.value }))
                   }
                 />
                 {settingsErrors.historyLimit ? <em>{settingsErrors.historyLimit}</em> : null}
@@ -185,7 +207,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
                         ...current,
                         popupSize: {
                           ...current.popupSize,
-                          width: Number(event.target.value)
+                          width: event.target.value
                         }
                       }))
                     }
@@ -207,7 +229,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
                         ...current,
                         popupSize: {
                           ...current.popupSize,
-                          height: Number(event.target.value)
+                          height: event.target.value
                         }
                       }))
                     }

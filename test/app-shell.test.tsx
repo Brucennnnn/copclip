@@ -81,7 +81,7 @@ function installClipboardApi(clips = createClips()) {
     },
     restoreClipboardItem: vi.fn(async () => true),
     updateSettings: vi.fn(async (patch: CopClipSettingsPatch) => {
-      if (patch.historyLimit === 0) {
+      if (patch.historyLimit === 0 || patch.historyLimit === "0") {
         return {
           ok: false,
           settings: currentSettings,
@@ -93,12 +93,25 @@ function installClipboardApi(clips = createClips()) {
 
       currentSettings = {
         globalHotkey: typeof patch.globalHotkey === "string" ? patch.globalHotkey : currentSettings.globalHotkey,
-        historyLimit: typeof patch.historyLimit === "number" ? patch.historyLimit : currentSettings.historyLimit,
+        historyLimit:
+          typeof patch.historyLimit === "number"
+            ? patch.historyLimit
+            : typeof patch.historyLimit === "string"
+              ? Number(patch.historyLimit)
+              : currentSettings.historyLimit,
         popupSize: {
           width:
-            typeof patch.popupSize?.width === "number" ? patch.popupSize.width : currentSettings.popupSize.width,
+            typeof patch.popupSize?.width === "number"
+              ? patch.popupSize.width
+              : typeof patch.popupSize?.width === "string"
+                ? Number(patch.popupSize.width)
+                : currentSettings.popupSize.width,
           height:
-            typeof patch.popupSize?.height === "number" ? patch.popupSize.height : currentSettings.popupSize.height
+            typeof patch.popupSize?.height === "number"
+              ? patch.popupSize.height
+              : typeof patch.popupSize?.height === "string"
+                ? Number(patch.popupSize.height)
+                : currentSettings.popupSize.height
         },
         theme:
           patch.theme === "system" || patch.theme === "light" || patch.theme === "dark"
@@ -251,6 +264,22 @@ describe("CopClip app shell", () => {
       expect(screen.getByText("Check values")).toBeInTheDocument();
       expect(screen.getByText("Use a number from 1 to 5000.")).toBeInTheDocument();
     });
+  });
+
+  it("allows clearing numeric settings fields while editing", async () => {
+    installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    const historyLimitInput = await screen.findByDisplayValue("100");
+    fireEvent.change(historyLimitInput, {
+      target: {
+        value: ""
+      }
+    });
+
+    expect(historyLimitInput).toHaveValue(null);
   });
 
   it("filters visible text clipboard history as the user types", async () => {
