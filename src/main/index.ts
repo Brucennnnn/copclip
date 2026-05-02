@@ -10,15 +10,29 @@ import {
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
 import { ensureLiveWindow } from "./popup-window-state";
-import { preloadScriptPath } from "./window-paths";
+import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
+
+const desktopSize = {
+  width: 1040,
+  height: 720
+};
 
 const popupSize = {
   width: 400,
   height: 500
 };
 
+let desktopWindow: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null;
+
+function showDesktopShell(): void {
+  debugLog("desktop", "show requested");
+  desktopWindow = ensureLiveWindow(desktopWindow, createDesktopShellWindow);
+
+  desktopWindow.show();
+  desktopWindow.focus();
+}
 
 function openClipboardPopup(): void {
   debugLog("popup", "open requested");
@@ -51,6 +65,67 @@ function registerGlobalHotkey(): void {
   if (!registered) {
     console.warn("CopClip could not register Command+Shift+V global shortcut.");
   }
+}
+
+function loadRendererSurface(window: BrowserWindow, surface: RendererSurface): void {
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    const url = rendererDevUrl(process.env.ELECTRON_RENDERER_URL, surface);
+    debugLog("window", "load renderer url", { surface, url });
+    window.loadURL(url);
+  } else {
+    debugLog("window", "load renderer file", { surface });
+    window.loadFile(join(__dirname, "../renderer/index.html"), {
+      query: {
+        surface
+      }
+    });
+  }
+}
+
+function configureExternalLinks(window: BrowserWindow): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+}
+
+function createDesktopShellWindow(): BrowserWindow {
+  debugLog("window", "create desktop shell window");
+  const window = new BrowserWindow({
+    width: desktopSize.width,
+    height: desktopSize.height,
+    minWidth: 860,
+    minHeight: 560,
+    title: "CopClip",
+    show: false,
+    backgroundColor: "#f8fafc",
+    webPreferences: {
+      preload: preloadScriptPath(__dirname),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  window.on("closed", () => {
+    debugLog("window", "desktop shell closed");
+    if (desktopWindow === window) {
+      desktopWindow = null;
+    }
+  });
+
+  window.webContents.on("did-finish-load", () => {
+    debugLog("window", "desktop renderer loaded");
+  });
+
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    debugLog("window", "desktop renderer failed to load", { errorCode, errorDescription, validatedURL });
+  });
+
+  configureExternalLinks(window);
+  loadRendererSurface(window, "desktop");
+
+  return window;
 }
 
 function createClipboardPopupWindow(): BrowserWindow {
@@ -98,18 +173,8 @@ function createClipboardPopupWindow(): BrowserWindow {
     debugLog("window", "popup renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
-  });
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    debugLog("window", "load renderer url", { url: process.env.ELECTRON_RENDERER_URL });
-    window.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    debugLog("window", "load renderer file");
-    window.loadFile(join(__dirname, "../renderer/index.html"));
-  }
+  configureExternalLinks(window);
+  loadRendererSurface(window, "popup");
 
   return window;
 }
@@ -117,13 +182,14 @@ function createClipboardPopupWindow(): BrowserWindow {
 app.whenReady().then(() => {
   debugLog("app", "ready");
   registerClipboardHistoryIpc();
+  desktopWindow = createDesktopShellWindow();
   popupWindow = createClipboardPopupWindow();
   registerGlobalHotkey();
   startTextClipboardCapture();
+  showDesktopShell();
 
   app.on("activate", () => {
-    popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
-    openClipboardPopup();
+    showDesktopShell();
   });
 });
 

@@ -7,6 +7,7 @@ import type { ClipboardTextItem } from "../src/shared/clipboard-history";
 afterEach(() => {
   cleanup();
   delete window.copclip;
+  window.history.pushState({}, "", "/");
 });
 
 function createClips(): ClipboardTextItem[] {
@@ -68,6 +69,57 @@ function installClipboardApi(clips = createClips()) {
 }
 
 describe("CopClip app shell", () => {
+  it("shows the desktop shell for normal app usage", async () => {
+    installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    expect(screen.getByLabelText("CopClip desktop shell")).toBeInTheDocument();
+    expect(screen.getByLabelText("CopClip navigation")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Advanced" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Clipboard popup")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("2 text clips")).toBeInTheDocument();
+      expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("updates desktop shell history when clipboard text changes", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2 text clips")).toBeInTheDocument();
+    });
+
+    api.replaceClips([
+      {
+        id: "clip-3",
+        type: "text",
+        text: "Desktop shell clip",
+        preview: "Desktop shell clip",
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 16)).toISOString()
+      },
+      ...createClips()
+    ]);
+
+    act(() => {
+      api.emitHistoryChanged();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("3 text clips")).toBeInTheDocument();
+      expect(screen.getAllByText("Desktop shell clip").length).toBeGreaterThan(0);
+    });
+  });
+
   it("shows the compact clipboard popup without the full window shell", () => {
     render(<App />);
 

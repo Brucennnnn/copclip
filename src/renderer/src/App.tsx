@@ -30,7 +30,135 @@ function filterClips(items: ClipboardTextItem[], query: string): ClipboardTextIt
     : items;
 }
 
-export function App() {
+function currentSurface(): "desktop" | "popup" {
+  return new URLSearchParams(window.location.search).get("surface") === "desktop" ? "desktop" : "popup";
+}
+
+function DesktopShell() {
+  const appInfo = window.copclip?.getAppInfo();
+  const [clips, setClips] = useState<ClipboardTextItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
+
+  const loadHistory = useCallback(async () => {
+    if (!window.copclip) {
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    const items = await window.copclip.listClipboardHistory("");
+    setClips(items);
+    setIsLoadingHistory(false);
+  }, []);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (!window.copclip) {
+      return undefined;
+    }
+
+    return window.copclip.onClipboardHistoryChanged((items) => {
+      setClips(items);
+    });
+  }, []);
+
+  const recentClips = clips.slice(0, 5);
+
+  return (
+    <main className="desktop-shell" aria-label="CopClip desktop shell">
+      <aside className="desktop-nav" aria-label="CopClip navigation">
+        <div>
+          <p className="brand">CopClip</p>
+          <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : "Desktop"}</span>
+        </div>
+        <nav>
+          <a aria-current="page" href="#history">History</a>
+          <a href="#settings">Settings</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#advanced">Advanced</a>
+        </nav>
+      </aside>
+
+      <section className="desktop-content">
+        <header className="desktop-header">
+          <div>
+            <h1>History</h1>
+            <p>Review recent clips and manage CopClip configuration from the main app window.</p>
+          </div>
+          <span className="status-pill">{isLoadingHistory ? "Loading" : `${clips.length} text clips`}</span>
+        </header>
+
+        <div className="desktop-grid">
+          <section className="desktop-panel" id="history" aria-label="Recent clipboard history">
+            <div className="panel-heading">
+              <h2>Recent Text Clips</h2>
+              <span className="meta">{recentClips.length} shown</span>
+            </div>
+            <div className="desktop-list">
+              {recentClips.map((clip) => (
+                <article className="desktop-clip" key={clip.id}>
+                  <strong>{clipTitle(clip)}</strong>
+                  <p>{clip.preview}</p>
+                  <span className="meta">{formatClipAge(clip.capturedAt)}</span>
+                </article>
+              ))}
+              {recentClips.length === 0 ? (
+                <div className="empty-state" role="status">
+                  {isLoadingHistory ? "Loading history" : "Copy text to start history"}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="desktop-panel" id="settings" aria-label="Settings">
+            <div className="panel-heading">
+              <h2>Settings</h2>
+              <span className="meta">Planned</span>
+            </div>
+            <div className="settings-list">
+              <div>
+                <strong>Global hotkey</strong>
+                <span>Command+Shift+V</span>
+              </div>
+              <div>
+                <strong>Popup size</strong>
+                <span>400 x 500</span>
+              </div>
+              <div>
+                <strong>History limit</strong>
+                <span>Pending SQLite storage</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="desktop-panel" id="privacy" aria-label="Privacy and local storage">
+            <div className="panel-heading">
+              <h2>Privacy</h2>
+              <span className="meta">Local</span>
+            </div>
+            <p className="panel-copy">
+              Clipboard history is kept on this Mac. Pause capture and ignored-app controls will live here as the desktop shell grows.
+            </p>
+          </section>
+
+          <section className="desktop-panel" id="advanced" aria-label="Advanced controls">
+            <div className="panel-heading">
+              <h2>Advanced</h2>
+              <span className="meta">Planned</span>
+            </div>
+            <p className="panel-copy">
+              Pinning, deletion, clear history, rich clipboard types, and import or export controls will extend this area.
+            </p>
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ClipboardPopup() {
   const appInfo = window.copclip?.getAppInfo();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [clips, setClips] = useState<ClipboardTextItem[]>([]);
@@ -225,4 +353,8 @@ export function App() {
       </section>
     </main>
   );
+}
+
+export function App() {
+  return currentSurface() === "desktop" ? <DesktopShell /> : <ClipboardPopup />;
 }
