@@ -32,6 +32,7 @@ function createClips(): ClipboardTextItem[] {
 
 function installClipboardApi(clips = createClips()) {
   let popupOpenedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
+  let historyChangedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
   let currentClips = clips;
   const api = {
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
@@ -42,13 +43,19 @@ function installClipboardApi(clips = createClips()) {
         ? currentClips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
         : currentClips;
     }),
-    onClipboardHistoryChanged: vi.fn(() => () => undefined),
+    onClipboardHistoryChanged: vi.fn((callback: (items: ClipboardTextItem[]) => void) => {
+      historyChangedCallback = callback;
+      return () => undefined;
+    }),
     onClipboardPopupOpened: vi.fn((callback: (items: ClipboardTextItem[]) => void) => {
       popupOpenedCallback = callback;
       return () => undefined;
     }),
     openPopup: () => {
       popupOpenedCallback?.(currentClips);
+    },
+    emitHistoryChanged: () => {
+      historyChangedCallback?.(currentClips);
     },
     replaceClips: (nextClips: ClipboardTextItem[]) => {
       currentClips = nextClips;
@@ -130,7 +137,9 @@ describe("CopClip app shell", () => {
     });
 
     fireEvent.keyDown(window, { key: "ArrowDown" });
-    expect(githubItem).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => {
+      expect(githubItem).toHaveAttribute("aria-selected", "true");
+    });
 
     fireEvent.keyDown(window, { key: "Enter" });
 
@@ -146,6 +155,11 @@ describe("CopClip app shell", () => {
 
     await screen.findByRole("button", {
       name: /Restore clipboard item 2: GitHub issue link/
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: Release checklist/
+      })).toHaveAttribute("aria-selected", "true");
     });
 
     fireEvent.keyDown(window, { key: "2" });
@@ -200,6 +214,78 @@ describe("CopClip app shell", () => {
         name: /Restore clipboard item 1: Copied while hidden/
       })).toBeInTheDocument();
       expect(search).toHaveFocus();
+    });
+  });
+
+  it("clears stale search when showing text copied outside the app", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    const search = screen.getByLabelText("Search clipboard history");
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    fireEvent.change(search, {
+      target: { value: "git" }
+    });
+
+    await waitFor(() => {
+      expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
+      expect(screen.getAllByText("GitHub issue link").length).toBeGreaterThan(0);
+    });
+
+    api.replaceClips([
+      {
+        id: "clip-3",
+        type: "text",
+        text: "Copied from another app",
+        preview: "Copied from another app",
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 14)).toISOString()
+      }
+    ]);
+
+    act(() => {
+      api.openPopup();
+    });
+
+    await waitFor(() => {
+      expect(search).toHaveValue("");
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: Copied from another app/
+      })).toBeInTheDocument();
+    });
+  });
+
+  it("updates visible history when clipboard text changes while the popup is mounted", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    api.replaceClips([
+      {
+        id: "clip-3",
+        type: "text",
+        text: "Copied moments ago",
+        preview: "Copied moments ago",
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 15)).toISOString()
+      },
+      ...createClips()
+    ]);
+
+    act(() => {
+      api.emitHistoryChanged();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: Copied moments ago/
+      })).toBeInTheDocument();
     });
   });
 });

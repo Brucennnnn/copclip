@@ -4,10 +4,13 @@ import { is } from "@electron-toolkit/utils";
 import {
   captureCurrentClipboardText,
   registerClipboardHistoryIpc,
+  sendToLiveWindow,
   startTextClipboardCapture,
   stopTextClipboardCapture
 } from "./clipboard-capture";
+import { debugLog } from "./debug-log";
 import { ensureLiveWindow } from "./popup-window-state";
+import { preloadScriptPath } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
 const popupSize = {
@@ -18,6 +21,7 @@ const popupSize = {
 let popupWindow: BrowserWindow | null = null;
 
 function openClipboardPopup(): void {
+  debugLog("popup", "open requested");
   popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
 
   const cursor = screen.getCursorScreenPoint();
@@ -25,15 +29,24 @@ function openClipboardPopup(): void {
   const position = positionPopupNearCursor(cursor, display.workArea, popupSize);
 
   const items = captureCurrentClipboardText({ force: true });
+  debugLog("popup", "show popup", {
+    historyCount: items.length,
+    x: position.x,
+    y: position.y,
+    width: popupSize.width,
+    height: popupSize.height
+  });
   popupWindow.setBounds({ ...position, ...popupSize });
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
-  popupWindow.webContents.send("clipboard-popup:opened", items);
+  const sent = sendToLiveWindow(popupWindow, "clipboard-popup:opened", items);
+  debugLog("popup", "sent popup opened event", { sent });
 }
 
 function registerGlobalHotkey(): void {
   const registered = globalShortcut.register("CommandOrControl+Shift+V", openClipboardPopup);
+  debugLog("hotkey", "register global shortcut", { accelerator: "CommandOrControl+Shift+V", registered });
 
   if (!registered) {
     console.warn("CopClip could not register Command+Shift+V global shortcut.");
@@ -41,6 +54,7 @@ function registerGlobalHotkey(): void {
 }
 
 function createClipboardPopupWindow(): BrowserWindow {
+  debugLog("window", "create popup window");
   const window = new BrowserWindow({
     width: popupSize.width,
     height: popupSize.height,
@@ -52,7 +66,7 @@ function createClipboardPopupWindow(): BrowserWindow {
     resizable: false,
     backgroundColor: "#fbfcfd",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: preloadScriptPath(__dirname),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -60,17 +74,28 @@ function createClipboardPopupWindow(): BrowserWindow {
   });
 
   window.on("hide", () => {
+    debugLog("window", "popup hidden");
     window.setAlwaysOnTop(false);
   });
 
   window.on("blur", () => {
+    debugLog("window", "popup blurred");
     window.hide();
   });
 
   window.on("closed", () => {
+    debugLog("window", "popup closed");
     if (popupWindow === window) {
       popupWindow = null;
     }
+  });
+
+  window.webContents.on("did-finish-load", () => {
+    debugLog("window", "popup renderer loaded");
+  });
+
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    debugLog("window", "popup renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -79,8 +104,10 @@ function createClipboardPopupWindow(): BrowserWindow {
   });
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    debugLog("window", "load renderer url", { url: process.env.ELECTRON_RENDERER_URL });
     window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
+    debugLog("window", "load renderer file");
     window.loadFile(join(__dirname, "../renderer/index.html"));
   }
 
@@ -88,6 +115,7 @@ function createClipboardPopupWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  debugLog("app", "ready");
   registerClipboardHistoryIpc();
   popupWindow = createClipboardPopupWindow();
   registerGlobalHotkey();

@@ -50,6 +50,21 @@ export function App() {
     setIsLoadingHistory(false);
   }, [query]);
 
+  const refreshPopupHistory = useCallback(async () => {
+    if (!window.copclip) {
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    const items = await window.copclip.listClipboardHistory("");
+
+    setQuery("");
+    setClips(items);
+    setIsLoadingHistory(false);
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, []);
+
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
@@ -69,13 +84,17 @@ export function App() {
       return undefined;
     }
 
-    return window.copclip.onClipboardPopupOpened((items) => {
-      setClips(filterClips(items, query));
-      setIsLoadingHistory(false);
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
+    return window.copclip.onClipboardPopupOpened(() => {
+      void refreshPopupHistory();
     });
-  }, [query]);
+  }, [refreshPopupHistory]);
+
+  useEffect(() => {
+    window.addEventListener("focus", refreshPopupHistory);
+    return () => {
+      window.removeEventListener("focus", refreshPopupHistory);
+    };
+  }, [refreshPopupHistory]);
 
   useEffect(() => {
     setSelectedIndex((currentIndex) => {
