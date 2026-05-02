@@ -59,6 +59,17 @@ describe("clipboard text history", () => {
     expect(history.list()).toEqual([]);
   });
 
+  it("prunes existing text history when the limit changes", () => {
+    const history = createClipboardHistory({ historyLimit: 5 });
+
+    history.captureText("First");
+    history.captureText("Second");
+    history.captureText("Third");
+    history.setHistoryLimit?.(2);
+
+    expect(history.list().map((item) => item.text)).toEqual(["Third", "Second"]);
+  });
+
   it("creates readable single-line truncated previews", () => {
     expect(previewText("one\n\n two\tthree", 20)).toBe("one two three");
     expect(previewText("This is a long clipboard entry", 15)).toBe("This is a lo...");

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { app, BrowserWindow, globalShortcut, Menu, nativeImage, screen, shell, Tray } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
   captureCurrentClipboardText,
@@ -9,12 +9,15 @@ import {
   registerClipboardHistoryIpc,
   sendToLiveWindow,
   startTextClipboardCapture,
-  stopTextClipboardCapture
+  stopTextClipboardCapture,
+  updateClipboardHistoryLimit
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
 import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
+import { createFileSettingsStore, type SettingsStore } from "./settings-store";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
+import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
 
@@ -23,16 +26,14 @@ const desktopSize = {
   height: 720
 };
 
-const popupSize = {
-  width: 400,
-  height: 500
-};
-
 let desktopWindow: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null;
 let menuBarTray: Tray | null = null;
 let capturePaused = false;
 let dockHidden = false;
+let registeredHotkey = "";
+let settingsStore: SettingsStore | null = null;
+let appSettings: CopClipSettings = defaultCopClipSettings;
 
 function showDesktopShell(): void {
   debugLog("desktop", "show requested");
@@ -53,17 +54,17 @@ function openClipboardPopup(): void {
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
-  const position = positionPopupNearCursor(cursor, display.workArea, popupSize);
+  const position = positionPopupNearCursor(cursor, display.workArea, appSettings.popupSize);
 
   const items = captureCurrentClipboardText({ force: true });
   debugLog("popup", "show popup", {
     historyCount: items.length,
     x: position.x,
     y: position.y,
-    width: popupSize.width,
-    height: popupSize.height
+    width: appSettings.popupSize.width,
+    height: appSettings.popupSize.height
   });
-  popupWindow.setBounds({ ...position, ...popupSize });
+  popupWindow.setBounds({ ...position, ...appSettings.popupSize });
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
@@ -71,13 +72,105 @@ function openClipboardPopup(): void {
   debugLog("popup", "sent popup opened event", { sent });
 }
 
-function registerGlobalHotkey(): void {
-  const registered = globalShortcut.register("CommandOrControl+Shift+V", openClipboardPopup);
-  debugLog("hotkey", "register global shortcut", { accelerator: "CommandOrControl+Shift+V", registered });
+function registerGlobalHotkey(accelerator = appSettings.globalHotkey): boolean {
+  const registered = globalShortcut.register(accelerator, openClipboardPopup);
+  debugLog("hotkey", "register global shortcut", { accelerator, registered });
 
   if (!registered) {
-    console.warn("CopClip could not register Command+Shift+V global shortcut.");
+    console.warn(`CopClip could not register ${accelerator} global shortcut.`);
+    return false;
   }
+
+  registeredHotkey = accelerator;
+  return true;
+}
+
+function replaceGlobalHotkey(accelerator: string): boolean {
+  if (accelerator === registeredHotkey) {
+    return true;
+  }
+
+  const registered = globalShortcut.register(accelerator, openClipboardPopup);
+  debugLog("hotkey", "replace global shortcut", { accelerator, registered });
+
+  if (!registered) {
+    return false;
+  }
+
+  if (registeredHotkey) {
+    globalShortcut.unregister(registeredHotkey);
+  }
+
+  registeredHotkey = accelerator;
+  return true;
+}
+
+function sendSettingsChanged(): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    sendToLiveWindow(window, "settings:changed", appSettings);
+  });
+}
+
+function registerSettingsIpc(): void {
+  ipcMain.handle("settings:get", () => appSettings);
+
+  ipcMain.handle("settings:update", (_event, patch) => {
+    if (!settingsStore) {
+      return {
+        ok: false,
+        settings: appSettings,
+        errors: {
+          theme: "Settings storage is not ready."
+        }
+      };
+    }
+
+    const validation = validateSettings(patch, appSettings);
+
+    if (hasSettingsValidationErrors(validation)) {
+      return {
+        ok: false,
+        settings: appSettings,
+        errors: validation.errors
+      };
+    }
+
+    if (validation.settings.globalHotkey !== appSettings.globalHotkey && !replaceGlobalHotkey(validation.settings.globalHotkey)) {
+      return {
+        ok: false,
+        settings: appSettings,
+        errors: {
+          globalHotkey: "This shortcut could not be registered."
+        }
+      };
+    }
+
+    const previousSettings = appSettings;
+    const result = settingsStore.update(patch);
+    appSettings = result.settings;
+
+    if (appSettings.historyLimit !== previousSettings.historyLimit) {
+      updateClipboardHistoryLimit(appSettings.historyLimit);
+    }
+
+    if (
+      popupWindow &&
+      !popupWindow.isDestroyed() &&
+      (appSettings.popupSize.width !== previousSettings.popupSize.width ||
+        appSettings.popupSize.height !== previousSettings.popupSize.height)
+    ) {
+      popupWindow.setMinimumSize(appSettings.popupSize.width, appSettings.popupSize.height);
+      popupWindow.setSize(appSettings.popupSize.width, appSettings.popupSize.height);
+    }
+
+    sendSettingsChanged();
+    debugLog("settings", "updated settings", appSettings);
+    return {
+      ok: true,
+      settings: appSettings,
+      errors: {}
+    };
+  });
 }
 
 function createTrayIcon() {
@@ -214,10 +307,10 @@ function createDesktopShellWindow(): BrowserWindow {
 function createClipboardPopupWindow(): BrowserWindow {
   debugLog("window", "create popup window");
   const window = new BrowserWindow({
-    width: popupSize.width,
-    height: popupSize.height,
-    minWidth: popupSize.width,
-    minHeight: popupSize.height,
+    width: appSettings.popupSize.width,
+    height: appSettings.popupSize.height,
+    minWidth: appSettings.popupSize.width,
+    minHeight: appSettings.popupSize.height,
     title: "CopClip",
     show: false,
     frame: false,
@@ -264,8 +357,13 @@ function createClipboardPopupWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   debugLog("app", "ready");
-  configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite")));
+  settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
+  appSettings = settingsStore.get();
+  configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
+    historyLimit: appSettings.historyLimit
+  }));
   registerClipboardHistoryIpc();
+  registerSettingsIpc();
   desktopWindow = createDesktopShellWindow();
   popupWindow = createClipboardPopupWindow();
   createMenuBarController();

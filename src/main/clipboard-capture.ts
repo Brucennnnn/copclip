@@ -47,6 +47,14 @@ export function clearClipboardHistory(): ClipboardTextItem[] {
   return items;
 }
 
+export function updateClipboardHistoryLimit(historyLimit: number): ClipboardTextItem[] {
+  clipboardHistory.setHistoryLimit?.(historyLimit);
+  const items = clipboardHistory.list();
+  sendClipboardHistoryChanged(items);
+  debugLog("capture", "updated clipboard history limit", { historyLimit, historyCount: items.length });
+  return items;
+}
+
 export function captureCurrentClipboardText(options: { force?: boolean } = {}): ClipboardTextItem[] {
   const nextText = clipboard.readText();
   const unchanged = nextText === lastObservedText;

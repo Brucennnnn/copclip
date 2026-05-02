@@ -48,7 +48,7 @@ export function createSqliteClipboardHistory(
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? (() => crypto.randomUUID());
   const previewLength = options.previewLength ?? defaultPreviewLength;
-  const historyLimit = Math.max(1, options.historyLimit ?? defaultHistoryLimit);
+  let historyLimit = Math.max(1, options.historyLimit ?? defaultHistoryLimit);
 
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
@@ -160,12 +160,18 @@ export function createSqliteClipboardHistory(
     clearStatement.run();
   }
 
+  function setHistoryLimit(limit: number): void {
+    historyLimit = Math.max(1, limit);
+    pruneHistory();
+  }
+
   return {
     captureText,
     clear,
     close: () => database.close(),
     findById,
     list,
-    pinItem
+    pinItem,
+    setHistoryLimit
   };
 }

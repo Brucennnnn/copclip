@@ -11,6 +11,28 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: oklch(20% 0.012 250);
+    --surface: oklch(25% 0.014 250);
+    --fg: oklch(94% 0.006 250);
+    --muted: oklch(72% 0.012 250);
+    --border: oklch(36% 0.014 250);
+    --accent: oklch(68% 0.16 255);
+    --accent-soft: oklch(33% 0.04 255);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: oklch(20% 0.012 250);
+  --surface: oklch(25% 0.014 250);
+  --fg: oklch(94% 0.006 250);
+  --muted: oklch(72% 0.012 250);
+  --border: oklch(36% 0.014 250);
+  --accent: oklch(68% 0.16 255);
+  --accent-soft: oklch(33% 0.04 255);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -33,7 +55,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -178,30 +201,49 @@ h2 {
   line-height: 1.4;
 }
 
-.settings-list {
+.settings-form {
   display: grid;
+  gap: 12px;
+}
+
+.settings-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.settings-list div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
+.settings-form span {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-form input,
+.settings-form select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: color-mix(in oklch, var(--surface) 88%, var(--bg));
+  background: color-mix(in oklch, var(--surface) 90%, var(--bg));
+  color: var(--fg);
 }
 
-.settings-list strong {
-  font-size: 13px;
+.settings-form input[aria-invalid="true"] {
+  border-color: oklch(58% 0.2 25);
+  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(58% 0.2 25) 16%, transparent);
 }
 
-.settings-list span {
-  color: var(--muted);
-  font-size: 13px;
-  text-align: right;
+.settings-form em {
+  color: oklch(58% 0.2 25);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
 }
 
 .clipboard-popup {
@@ -381,7 +423,7 @@ kbd {
   }
 
   .desktop-header,
-  .settings-list div {
+  .settings-row {
     display: grid;
   }
 

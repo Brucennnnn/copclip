@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { defaultCopClipSettings, type CopClipSettings, type CopClipSettingsPatch } from "../../shared/app-settings";
 import type { ClipboardTextItem } from "../../shared/clipboard-history";
+import type { SettingsUpdateResult } from "../../preload/api";
 
 function formatClipAge(capturedAt: string): string {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(capturedAt)) / 1000));
@@ -34,10 +36,15 @@ function currentSurface(): "desktop" | "popup" {
   return new URLSearchParams(window.location.search).get("surface") === "desktop" ? "desktop" : "popup";
 }
 
-function DesktopShell() {
+type SettingsErrors = SettingsUpdateResult["errors"];
+
+function DesktopShell({ settings }: { settings: CopClipSettings }) {
   const appInfo = window.copclip?.getAppInfo();
   const [clips, setClips] = useState<ClipboardTextItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
+  const [draftSettings, setDraftSettings] = useState(settings);
+  const [settingsErrors, setSettingsErrors] = useState<SettingsErrors>({});
+  const [settingsStatus, setSettingsStatus] = useState("");
 
   const loadHistory = useCallback(async () => {
     if (!window.copclip) {
@@ -65,6 +72,24 @@ function DesktopShell() {
   }, []);
 
   const recentClips = clips.slice(0, 3);
+
+  useEffect(() => {
+    setDraftSettings(settings);
+  }, [settings]);
+
+  const updateSettings = useCallback(async (patch: CopClipSettingsPatch) => {
+    if (!window.copclip) {
+      return;
+    }
+
+    const result = await window.copclip.updateSettings(patch);
+    setSettingsErrors(result.errors);
+    setSettingsStatus(result.ok ? "Saved" : "Check values");
+
+    if (result.ok) {
+      setDraftSettings(result.settings);
+    }
+  }, []);
 
   return (
     <main className="desktop-shell" aria-label="CopClip desktop shell">
@@ -115,22 +140,99 @@ function DesktopShell() {
           <section className="desktop-panel" id="settings" aria-label="Settings">
             <div className="panel-heading">
               <h2>Settings</h2>
-              <span className="meta">Planned</span>
+              <span className="meta">{settingsStatus || "Local"}</span>
             </div>
-            <div className="settings-list">
-              <div>
-                <strong>Global hotkey</strong>
-                <span>Command+Shift+V</span>
+            <form className="settings-form" aria-label="CopClip settings">
+              <label>
+                <span>Global hotkey</span>
+                <input
+                  aria-invalid={Boolean(settingsErrors.globalHotkey)}
+                  value={draftSettings.globalHotkey}
+                  onBlur={() => void updateSettings({ globalHotkey: draftSettings.globalHotkey })}
+                  onChange={(event) => setDraftSettings((current) => ({ ...current, globalHotkey: event.target.value }))}
+                />
+                {settingsErrors.globalHotkey ? <em>{settingsErrors.globalHotkey}</em> : null}
+              </label>
+
+              <label>
+                <span>History limit</span>
+                <input
+                  aria-invalid={Boolean(settingsErrors.historyLimit)}
+                  min={1}
+                  max={5000}
+                  type="number"
+                  value={draftSettings.historyLimit}
+                  onBlur={() => void updateSettings({ historyLimit: draftSettings.historyLimit })}
+                  onChange={(event) =>
+                    setDraftSettings((current) => ({ ...current, historyLimit: Number(event.target.value) }))
+                  }
+                />
+                {settingsErrors.historyLimit ? <em>{settingsErrors.historyLimit}</em> : null}
+              </label>
+
+              <div className="settings-row" aria-label="Popup size">
+                <label>
+                  <span>Popup width</span>
+                  <input
+                    aria-invalid={Boolean(settingsErrors["popupSize.width"])}
+                    min={320}
+                    max={900}
+                    type="number"
+                    value={draftSettings.popupSize.width}
+                    onBlur={() => void updateSettings({ popupSize: draftSettings.popupSize })}
+                    onChange={(event) =>
+                      setDraftSettings((current) => ({
+                        ...current,
+                        popupSize: {
+                          ...current.popupSize,
+                          width: Number(event.target.value)
+                        }
+                      }))
+                    }
+                  />
+                  {settingsErrors["popupSize.width"] ? <em>{settingsErrors["popupSize.width"]}</em> : null}
+                </label>
+
+                <label>
+                  <span>Popup height</span>
+                  <input
+                    aria-invalid={Boolean(settingsErrors["popupSize.height"])}
+                    min={360}
+                    max={900}
+                    type="number"
+                    value={draftSettings.popupSize.height}
+                    onBlur={() => void updateSettings({ popupSize: draftSettings.popupSize })}
+                    onChange={(event) =>
+                      setDraftSettings((current) => ({
+                        ...current,
+                        popupSize: {
+                          ...current.popupSize,
+                          height: Number(event.target.value)
+                        }
+                      }))
+                    }
+                  />
+                  {settingsErrors["popupSize.height"] ? <em>{settingsErrors["popupSize.height"]}</em> : null}
+                </label>
               </div>
-              <div>
-                <strong>Popup size</strong>
-                <span>400 x 500</span>
-              </div>
-              <div>
-                <strong>History limit</strong>
-                <span>Pending SQLite storage</span>
-              </div>
-            </div>
+
+              <label>
+                <span>Theme</span>
+                <select
+                  value={draftSettings.theme}
+                  onChange={(event) => {
+                    const theme = event.target.value as CopClipSettings["theme"];
+                    setDraftSettings((current) => ({ ...current, theme }));
+                    void updateSettings({ theme });
+                  }}
+                >
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+                {settingsErrors.theme ? <em>{settingsErrors.theme}</em> : null}
+              </label>
+            </form>
           </section>
 
           <section className="desktop-panel" id="privacy" aria-label="Privacy and local storage">
@@ -356,5 +458,20 @@ function ClipboardPopup() {
 }
 
 export function App() {
-  return currentSurface() === "desktop" ? <DesktopShell /> : <ClipboardPopup />;
+  const [settings, setSettings] = useState(defaultCopClipSettings);
+
+  useEffect(() => {
+    if (!window.copclip) {
+      return undefined;
+    }
+
+    void window.copclip.getSettings().then(setSettings);
+    return window.copclip.onSettingsChanged(setSettings);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
+
+  return currentSurface() === "desktop" ? <DesktopShell settings={settings} /> : <ClipboardPopup />;
 }

@@ -101,6 +101,22 @@ describe("sqlite clipboard text history", () => {
     history.close?.();
   });
 
+  it("prunes existing stored history when the limit changes", () => {
+    let second = 0;
+    const history = createSqliteClipboardHistory(createDatabasePath(), {
+      historyLimit: 5,
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, 0, second++))
+    });
+
+    history.captureText("First");
+    history.captureText("Second");
+    history.captureText("Third");
+    history.setHistoryLimit?.(2);
+
+    expect(history.list().map((item) => item.text)).toEqual(["Third", "Second"]);
+    history.close?.();
+  });
+
   it("prunes old unpinned items while preserving pinned items", () => {
     let second = 0;
     const history = createSqliteClipboardHistory(createDatabasePath(), {

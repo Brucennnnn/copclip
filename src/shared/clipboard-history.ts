@@ -13,15 +13,18 @@ export type ClipboardHistory = {
   list: (query?: string) => ClipboardTextItem[];
   close?: () => void;
   pinItem?: (id: string) => boolean;
+  setHistoryLimit?: (limit: number) => void;
 };
 
 type ClipboardHistoryOptions = {
   now?: () => Date;
   createId?: () => string;
   previewLength?: number;
+  historyLimit?: number;
 };
 
 const defaultPreviewLength = 140;
+const defaultHistoryLimit = 100;
 
 export function normalizeClipboardText(text: string): string | null {
   const normalized = text.replace(/\r\n/g, "\n").trim();
@@ -42,7 +45,12 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? (() => crypto.randomUUID());
   const previewLength = options.previewLength ?? defaultPreviewLength;
+  let historyLimit = Math.max(1, options.historyLimit ?? defaultHistoryLimit);
   const items: ClipboardTextItem[] = [];
+
+  function pruneHistory(): void {
+    items.splice(historyLimit);
+  }
 
   function captureText(text: string): ClipboardTextItem | null {
     const normalized = normalizeClipboardText(text);
@@ -75,6 +83,7 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
     };
 
     items.unshift(item);
+    pruneHistory();
     return item;
   }
 
@@ -96,10 +105,16 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
     items.length = 0;
   }
 
+  function setHistoryLimit(limit: number): void {
+    historyLimit = Math.max(1, limit);
+    pruneHistory();
+  }
+
   return {
     captureText,
     clear,
     findById,
-    list
+    list,
+    setHistoryLimit
   };
 }

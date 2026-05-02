@@ -40,7 +40,7 @@ npm run build
 The scaffold includes:
 
 - Electron main process lifecycle for a development window.
-- A secure preload bridge that exposes app info and typed clipboard-history read/subscribe APIs.
+- A secure preload bridge that exposes app info, settings, and typed clipboard-history read/subscribe APIs.
 - Main-process text clipboard polling while the app is running.
 - `Command+Shift+V` global shortcut registration for opening the popup while CopClip is running in the background.
 - SQLite-backed text history with empty-item filtering, deduplication, most-recent ordering, truncated previews, search filtering, and pruning.
@@ -48,6 +48,7 @@ The scaffold includes:
 - A compact React clipboard popup with live history search, mouse selection, and keyboard selection.
 - Restore-to-clipboard actions for clicked items, arrow/Enter selection, number shortcuts, and Escape dismissal.
 - A menu bar item with Open Popup, Open Desktop Shell, Pause or Resume Capture, Clear History, Settings, About & Privacy, Hide Dock Icon, and Quit commands.
+- Local settings for global hotkey, history limit, popup size, and theme, with validation and runtime behavior updates.
 - Cursor-aware popup positioning constrained to the active display work area, with the popup above other windows while visible.
 - Styling based on `docs/design/initial-app-shell.html`.
 - Vitest coverage for the desktop shell, quick popup, exposed preload API contract, text history, deduplication, search behavior, restore selection, dismissal, search focus, and deterministic popup positioning.

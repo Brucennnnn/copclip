@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
 import { exposedApiKeys } from "../src/preload/api";
+import { defaultCopClipSettings, type CopClipSettings, type CopClipSettingsPatch } from "../src/shared/app-settings";
 import type { ClipboardTextItem } from "../src/shared/clipboard-history";
 
 afterEach(() => {
@@ -44,10 +45,13 @@ function createManyClips(): ClipboardTextItem[] {
 function installClipboardApi(clips = createClips()) {
   let popupOpenedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
   let historyChangedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
+  let settingsChangedCallback: ((settings: CopClipSettings) => void) | undefined;
   let currentClips = clips;
+  let currentSettings = defaultCopClipSettings;
   const api = {
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
     dismissClipboardPopup: vi.fn(async () => undefined),
+    getSettings: vi.fn(async () => currentSettings),
     listClipboardHistory: vi.fn(async (query = "") => {
       const normalizedQuery = query.toLocaleLowerCase();
       return normalizedQuery
@@ -62,6 +66,10 @@ function installClipboardApi(clips = createClips()) {
       popupOpenedCallback = callback;
       return () => undefined;
     }),
+    onSettingsChanged: vi.fn((callback: (settings: CopClipSettings) => void) => {
+      settingsChangedCallback = callback;
+      return () => undefined;
+    }),
     openPopup: () => {
       popupOpenedCallback?.(currentClips);
     },
@@ -71,7 +79,39 @@ function installClipboardApi(clips = createClips()) {
     replaceClips: (nextClips: ClipboardTextItem[]) => {
       currentClips = nextClips;
     },
-    restoreClipboardItem: vi.fn(async () => true)
+    restoreClipboardItem: vi.fn(async () => true),
+    updateSettings: vi.fn(async (patch: CopClipSettingsPatch) => {
+      if (patch.historyLimit === 0) {
+        return {
+          ok: false,
+          settings: currentSettings,
+          errors: {
+            historyLimit: "Use a number from 1 to 5000."
+          }
+        };
+      }
+
+      currentSettings = {
+        globalHotkey: typeof patch.globalHotkey === "string" ? patch.globalHotkey : currentSettings.globalHotkey,
+        historyLimit: typeof patch.historyLimit === "number" ? patch.historyLimit : currentSettings.historyLimit,
+        popupSize: {
+          width:
+            typeof patch.popupSize?.width === "number" ? patch.popupSize.width : currentSettings.popupSize.width,
+          height:
+            typeof patch.popupSize?.height === "number" ? patch.popupSize.height : currentSettings.popupSize.height
+        },
+        theme:
+          patch.theme === "system" || patch.theme === "light" || patch.theme === "dark"
+            ? patch.theme
+            : currentSettings.theme
+      };
+      settingsChangedCallback?.(currentSettings);
+      return {
+        ok: true,
+        settings: currentSettings,
+        errors: {}
+      };
+    })
   };
 
   window.copclip = api;
@@ -161,11 +201,56 @@ describe("CopClip app shell", () => {
     expect(exposedApiKeys).toEqual([
       "getAppInfo",
       "dismissClipboardPopup",
+      "getSettings",
       "listClipboardHistory",
       "onClipboardHistoryChanged",
       "onClipboardPopupOpened",
-      "restoreClipboardItem"
+      "onSettingsChanged",
+      "restoreClipboardItem",
+      "updateSettings"
     ]);
+  });
+
+  it("allows editing persisted desktop settings", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    const hotkeyInput = await screen.findByDisplayValue("CommandOrControl+Shift+V");
+    fireEvent.change(hotkeyInput, {
+      target: {
+        value: "CommandOrControl+Alt+V"
+      }
+    });
+    fireEvent.blur(hotkeyInput);
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        globalHotkey: "CommandOrControl+Alt+V"
+      });
+      expect(screen.getByText("Saved")).toBeInTheDocument();
+    });
+  });
+
+  it("shows validation feedback for invalid desktop settings", async () => {
+    installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    const historyLimitInput = await screen.findByDisplayValue("100");
+    fireEvent.change(historyLimitInput, {
+      target: {
+        value: "0"
+      }
+    });
+    fireEvent.blur(historyLimitInput);
+
+    await waitFor(() => {
+      expect(screen.getByText("Check values")).toBeInTheDocument();
+      expect(screen.getByText("Use a number from 1 to 5000.")).toBeInTheDocument();
+    });
   });
 
   it("filters visible text clipboard history as the user types", async () => {
