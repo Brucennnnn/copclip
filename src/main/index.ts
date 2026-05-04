@@ -14,7 +14,7 @@ import {
   updateClipboardHistoryLimit
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
-import { capturePasteTargetApplication } from "./auto-paste";
+import { capturePasteTargetApplication, configureAutoPaste } from "./auto-paste";
 import { enableWaylandGlobalShortcuts } from "./global-shortcuts";
 import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
@@ -22,7 +22,7 @@ import { createFileSettingsStore, type SettingsStore } from "./settings-store";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
-import { positionPopupNearCursor } from "../shared/popup-position";
+import { positionPopup, type Point } from "../shared/popup-position";
 
 enableWaylandGlobalShortcuts(app.commandLine);
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -32,8 +32,8 @@ if (!hasSingleInstanceLock) {
 }
 
 const desktopSize = {
-  width: 1040,
-  height: 720
+  width: 650,
+  height: 600
 };
 
 let desktopWindow: BrowserWindow | null = null;
@@ -45,6 +45,23 @@ let registeredHotkey = "";
 let settingsStore: SettingsStore | null = null;
 let appSettings: CopClipSettings = defaultCopClipSettings;
 let suppressDesktopShellUntil = 0;
+let lastPopupPosition: Point | null = null;
+
+function applyLaunchAtLogin(launchAtLogin: boolean): void {
+  app.setLoginItemSettings({
+    openAtLogin: launchAtLogin
+  });
+}
+
+function applyRuntimeSettings(settings: CopClipSettings): void {
+  applyLaunchAtLogin(settings.launchAtLogin);
+  configureAutoPaste({ pasteAutomatically: settings.pasteAutomatically });
+  debugLog("settings", "runtime settings applied", {
+    checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
+    launchAtLogin: settings.launchAtLogin,
+    pasteAutomatically: settings.pasteAutomatically
+  });
+}
 
 function suppressDesktopShellActivation(durationMs = 1000): void {
   suppressDesktopShellUntil = Math.max(suppressDesktopShellUntil, Date.now() + durationMs);
@@ -80,7 +97,7 @@ function openClipboardPopup(): void {
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
-  const position = positionPopupNearCursor(cursor, display.workArea, appSettings.popupSize);
+  const position = positionPopup(appSettings.popupPosition, cursor, display.workArea, appSettings.popupSize, lastPopupPosition);
 
   const items = captureCurrentClipboardItem({ force: true });
   debugLog("popup", "show popup", {
@@ -91,6 +108,7 @@ function openClipboardPopup(): void {
     height: appSettings.popupSize.height
   });
   popupWindow.setBounds({ ...position, ...appSettings.popupSize });
+  lastPopupPosition = position;
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
@@ -98,7 +116,7 @@ function openClipboardPopup(): void {
   debugLog("popup", "sent popup opened event", { sent });
 }
 
-function registerGlobalHotkey(accelerator = appSettings.globalHotkey): boolean {
+function registerGlobalHotkey(accelerator = appSettings.openClipboardHistoryShortcut): boolean {
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
   debugLog("hotkey", "register global shortcut", {
     accelerator,
@@ -148,6 +166,11 @@ function sendSettingsChanged(): void {
 function registerSettingsIpc(): void {
   ipcMain.handle("settings:get", () => appSettings);
 
+  ipcMain.handle("settings:open", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.hide();
+    showDesktopShellSection("settings");
+  });
+
   ipcMain.handle("settings:update", (_event, patch) => {
     if (!settingsStore) {
       return {
@@ -169,12 +192,15 @@ function registerSettingsIpc(): void {
       };
     }
 
-    if (validation.settings.globalHotkey !== appSettings.globalHotkey && !replaceGlobalHotkey(validation.settings.globalHotkey)) {
+    if (
+      validation.settings.openClipboardHistoryShortcut !== appSettings.openClipboardHistoryShortcut &&
+      !replaceGlobalHotkey(validation.settings.openClipboardHistoryShortcut)
+    ) {
       return {
         ok: false,
         settings: appSettings,
         errors: {
-          globalHotkey: "This shortcut could not be registered."
+          openClipboardHistoryShortcut: "This shortcut could not be registered."
         }
       };
     }
@@ -185,6 +211,14 @@ function registerSettingsIpc(): void {
 
     if (appSettings.historyLimit !== previousSettings.historyLimit) {
       updateClipboardHistoryLimit(appSettings.historyLimit);
+    }
+
+    if (appSettings.launchAtLogin !== previousSettings.launchAtLogin) {
+      applyLaunchAtLogin(appSettings.launchAtLogin);
+    }
+
+    if (appSettings.pasteAutomatically !== previousSettings.pasteAutomatically) {
+      configureAutoPaste({ pasteAutomatically: appSettings.pasteAutomatically });
     }
 
     if (
@@ -304,11 +338,13 @@ function createDesktopShellWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: desktopSize.width,
     height: desktopSize.height,
-    minWidth: 860,
-    minHeight: 560,
+    minWidth: desktopSize.width,
+    minHeight: desktopSize.height,
     title: "CopClip",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 18 },
     show: false,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#1b1f1f",
     webPreferences: {
       preload: preloadScriptPath(__dirname),
       contextIsolation: true,
@@ -364,6 +400,11 @@ function createClipboardPopupWindow(): BrowserWindow {
     window.setAlwaysOnTop(false);
   });
 
+  window.on("moved", () => {
+    const [x, y] = window.getPosition();
+    lastPopupPosition = { x, y };
+  });
+
   window.on("blur", () => {
     debugLog("window", "popup blurred");
     window.hide();
@@ -406,6 +447,7 @@ if (hasSingleInstanceLock) {
     debugLog("app", "ready");
     settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
     appSettings = settingsStore.get();
+    applyRuntimeSettings(appSettings);
     configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
       historyLimit: appSettings.historyLimit
     }));

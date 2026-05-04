@@ -311,4 +311,24 @@ describe("clipboard capture", () => {
 
     expect(execFile).not.toHaveBeenCalled();
   });
+
+  it("restores clipboard text without pasting when automatic paste is disabled", async () => {
+    stubPlatform("darwin");
+    vi.useFakeTimers();
+    clipboardText = "copy only";
+    const { configureAutoPaste } = await import("../src/main/auto-paste");
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    configureAutoPaste({ pasteAutomatically: false });
+    const [item] = captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc();
+    const restore = ipcHandlers.get("clipboard-history:restore");
+
+    expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
+    expect(writeText).toHaveBeenCalledWith("copy only");
+
+    await vi.advanceTimersByTimeAsync(120);
+
+    expect(execFile).not.toHaveBeenCalled();
+  });
 });

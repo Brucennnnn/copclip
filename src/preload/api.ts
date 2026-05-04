@@ -16,6 +16,7 @@ export type CopClipApi = {
   onClipboardHistoryChanged: (callback: (items: ClipboardItem[]) => void) => () => void;
   onClipboardPopupOpened: (callback: (items: ClipboardItem[]) => void) => () => void;
   onSettingsChanged: (callback: (settings: CopClipSettings) => void) => () => void;
+  openSettings: () => Promise<void>;
   restoreClipboardItem: (id: string) => Promise<boolean>;
   updateSettings: (patch: CopClipSettingsPatch) => Promise<SettingsUpdateResult>;
 };
@@ -28,6 +29,7 @@ export const exposedApiKeys = [
   "onClipboardHistoryChanged",
   "onClipboardPopupOpened",
   "onSettingsChanged",
+  "openSettings",
   "restoreClipboardItem",
   "updateSettings"
 ] as const;

@@ -6,6 +6,11 @@ const osascriptPath = "/usr/bin/osascript";
 const pasteDelayMs = 120;
 
 let pasteTargetBundleId: string | null = null;
+let pasteAutomatically = true;
+
+export function configureAutoPaste(options: { pasteAutomatically: boolean }): void {
+  pasteAutomatically = options.pasteAutomatically;
+}
 
 function escapeAppleScriptString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -39,6 +44,11 @@ export function capturePasteTargetApplication(): string | null {
 }
 
 export function schedulePasteIntoTargetApplication(): boolean {
+  if (!pasteAutomatically) {
+    debugLog("paste", "auto-paste disabled");
+    return false;
+  }
+
   if (process.platform !== "darwin") {
     return false;
   }

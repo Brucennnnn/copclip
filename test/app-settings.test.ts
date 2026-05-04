@@ -8,8 +8,13 @@ import { defaultCopClipSettings, validateSettings } from "../src/shared/app-sett
 describe("CopClip settings validation", () => {
   it("accepts valid core settings", () => {
     const result = validateSettings({
-      globalHotkey: "CommandOrControl+Alt+V",
+      openClipboardHistoryShortcut: "CommandOrControl+Alt+V",
+      checkForUpdatesAutomatically: false,
       historyLimit: "250",
+      launchAtLogin: true,
+      pasteAutomatically: false,
+      pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+      popupPosition: "center",
       popupSize: {
         width: "520",
         height: 640
@@ -19,8 +24,13 @@ describe("CopClip settings validation", () => {
 
     expect(result.errors).toEqual({});
     expect(result.settings).toEqual({
-      globalHotkey: "CommandOrControl+Alt+V",
+      checkForUpdatesAutomatically: false,
       historyLimit: 250,
+      launchAtLogin: true,
+      openClipboardHistoryShortcut: "CommandOrControl+Alt+V",
+      pasteAutomatically: false,
+      pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+      popupPosition: "center",
       popupSize: {
         width: 520,
         height: 640
@@ -32,8 +42,13 @@ describe("CopClip settings validation", () => {
   it("rejects invalid values and keeps the current settings", () => {
     const result = validateSettings(
       {
-        globalHotkey: "V",
+        openClipboardHistoryShortcut: "V",
+        checkForUpdatesAutomatically: "yes",
         historyLimit: 0,
+        launchAtLogin: "yes",
+        pasteAutomatically: "yes",
+        pasteWithFormattingShortcut: "V",
+        popupPosition: "corner",
         popupSize: {
           width: 100,
           height: 1200
@@ -44,8 +59,13 @@ describe("CopClip settings validation", () => {
     );
 
     expect(result.errors).toEqual({
-      globalHotkey: "Use a shortcut like CommandOrControl+Shift+V.",
+      checkForUpdatesAutomatically: "Use on or off.",
       historyLimit: "Use a number from 1 to 5000.",
+      launchAtLogin: "Use on or off.",
+      openClipboardHistoryShortcut: "Use a shortcut like CommandOrControl+Shift+V.",
+      pasteAutomatically: "Use on or off.",
+      pasteWithFormattingShortcut: "Use a shortcut like CommandOrControl+Shift+Return.",
+      popupPosition: "Choose cursor, bottom, top, center, or last position.",
       "popupSize.width": "Use a width from 320 to 900.",
       "popupSize.height": "Use a height from 360 to 900.",
       theme: "Choose System, Light, or Dark."
@@ -70,8 +90,13 @@ describe("file settings store", () => {
 
     expect(result.errors).toEqual({});
     expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
-      globalHotkey: "CommandOrControl+Shift+V",
+      checkForUpdatesAutomatically: true,
       historyLimit: 25,
+      launchAtLogin: false,
+      openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
+      pasteAutomatically: true,
+      pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+      popupPosition: "cursor",
       popupSize: {
         width: 480,
         height: 620

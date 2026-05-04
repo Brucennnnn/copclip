@@ -39,6 +39,7 @@ const copclip: CopClipApi = {
       ipcRenderer.removeListener("clipboard-popup:opened", listener);
     };
   },
+  openSettings: () => ipcRenderer.invoke("settings:open"),
   restoreClipboardItem: (id) => ipcRenderer.invoke("clipboard-history:restore", id),
   updateSettings: (patch) => ipcRenderer.invoke("settings:update", patch)
 };

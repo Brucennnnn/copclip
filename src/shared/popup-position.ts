@@ -1,3 +1,5 @@
+import type { PopupPositionMode } from "./app-settings";
+
 export type Rectangle = {
   x: number;
   y: number;
@@ -33,5 +35,48 @@ export function positionPopupNearCursor(cursor: Point, displayWorkArea: Rectangl
   return {
     x: clamp(preferredX, displayWorkArea.x, Math.max(displayWorkArea.x, maximumX)),
     y: clamp(nextY, displayWorkArea.y, Math.max(displayWorkArea.y, maximumY))
+  };
+}
+
+export function positionPopup(
+  mode: PopupPositionMode,
+  cursor: Point,
+  displayWorkArea: Rectangle,
+  popupSize: Size,
+  lastPosition?: Point | null
+): Point {
+  const maximumX = displayWorkArea.x + displayWorkArea.width - popupSize.width;
+  const maximumY = displayWorkArea.y + displayWorkArea.height - popupSize.height;
+
+  if (mode === "cursor") {
+    return positionPopupNearCursor(cursor, displayWorkArea, popupSize);
+  }
+
+  if (mode === "last-position" && lastPosition) {
+    return {
+      x: clamp(lastPosition.x, displayWorkArea.x, Math.max(displayWorkArea.x, maximumX)),
+      y: clamp(lastPosition.y, displayWorkArea.y, Math.max(displayWorkArea.y, maximumY))
+    };
+  }
+
+  const centeredX = displayWorkArea.x + Math.round((displayWorkArea.width - popupSize.width) / 2);
+
+  if (mode === "top") {
+    return {
+      x: centeredX,
+      y: displayWorkArea.y
+    };
+  }
+
+  if (mode === "bottom") {
+    return {
+      x: centeredX,
+      y: Math.max(displayWorkArea.y, maximumY)
+    };
+  }
+
+  return {
+    x: centeredX,
+    y: displayWorkArea.y + Math.round((displayWorkArea.height - popupSize.height) / 2)
   };
 }

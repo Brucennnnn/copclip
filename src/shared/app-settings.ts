@@ -1,4 +1,5 @@
 export type CopClipTheme = "system" | "light" | "dark";
+export type PopupPositionMode = "cursor" | "bottom" | "top" | "center" | "last-position";
 
 export type PopupSize = {
   width: number;
@@ -6,15 +7,26 @@ export type PopupSize = {
 };
 
 export type CopClipSettings = {
-  globalHotkey: string;
+  checkForUpdatesAutomatically: boolean;
   historyLimit: number;
+  launchAtLogin: boolean;
+  openClipboardHistoryShortcut: string;
+  pasteAutomatically: boolean;
+  pasteWithFormattingShortcut: string;
+  popupPosition: PopupPositionMode;
   popupSize: PopupSize;
   theme: CopClipTheme;
 };
 
 export type CopClipSettingsPatch = Partial<{
+  checkForUpdatesAutomatically: unknown;
   globalHotkey: unknown;
   historyLimit: unknown;
+  launchAtLogin: unknown;
+  openClipboardHistoryShortcut: unknown;
+  pasteAutomatically: unknown;
+  pasteWithFormattingShortcut: unknown;
+  popupPosition: unknown;
   popupSize: Partial<Record<keyof PopupSize, unknown>>;
   theme: unknown;
 }>;
@@ -25,8 +37,13 @@ export type SettingsValidationResult = {
 };
 
 export const defaultCopClipSettings: CopClipSettings = {
-  globalHotkey: "CommandOrControl+Shift+V",
+  checkForUpdatesAutomatically: true,
   historyLimit: 100,
+  launchAtLogin: false,
+  openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
+  pasteAutomatically: true,
+  pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+  popupPosition: "cursor",
   popupSize: {
     width: 400,
     height: 500
@@ -41,6 +58,7 @@ const maxPopupWidth = 900;
 const minPopupHeight = 360;
 const maxPopupHeight = 900;
 const validThemes: CopClipTheme[] = ["system", "light", "dark"];
+const validPopupPositions: PopupPositionMode[] = ["cursor", "bottom", "top", "center", "last-position"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -79,13 +97,65 @@ export function validateSettings(
   };
   const errors: SettingsValidationResult["errors"] = {};
 
-  if ("globalHotkey" in patch) {
+  if ("checkForUpdatesAutomatically" in patch) {
+    if (typeof patch.checkForUpdatesAutomatically === "boolean") {
+      settings.checkForUpdatesAutomatically = patch.checkForUpdatesAutomatically;
+    } else {
+      errors.checkForUpdatesAutomatically = "Use on or off.";
+    }
+  }
+
+  if ("globalHotkey" in patch && !("openClipboardHistoryShortcut" in patch)) {
     const hotkey = typeof patch.globalHotkey === "string" ? patch.globalHotkey.trim() : "";
 
     if (!isValidHotkey(hotkey)) {
-      errors.globalHotkey = "Use a shortcut like CommandOrControl+Shift+V.";
+      errors.openClipboardHistoryShortcut = "Use a shortcut like CommandOrControl+Shift+V.";
     } else {
-      settings.globalHotkey = hotkey;
+      settings.openClipboardHistoryShortcut = hotkey;
+    }
+  }
+
+  if ("openClipboardHistoryShortcut" in patch) {
+    const shortcut = typeof patch.openClipboardHistoryShortcut === "string" ? patch.openClipboardHistoryShortcut.trim() : "";
+
+    if (!isValidHotkey(shortcut)) {
+      errors.openClipboardHistoryShortcut = "Use a shortcut like CommandOrControl+Shift+V.";
+    } else {
+      settings.openClipboardHistoryShortcut = shortcut;
+    }
+  }
+
+  if ("launchAtLogin" in patch) {
+    if (typeof patch.launchAtLogin === "boolean") {
+      settings.launchAtLogin = patch.launchAtLogin;
+    } else {
+      errors.launchAtLogin = "Use on or off.";
+    }
+  }
+
+  if ("pasteAutomatically" in patch) {
+    if (typeof patch.pasteAutomatically === "boolean") {
+      settings.pasteAutomatically = patch.pasteAutomatically;
+    } else {
+      errors.pasteAutomatically = "Use on or off.";
+    }
+  }
+
+  if ("pasteWithFormattingShortcut" in patch) {
+    const shortcut = typeof patch.pasteWithFormattingShortcut === "string" ? patch.pasteWithFormattingShortcut.trim() : "";
+
+    if (!isValidHotkey(shortcut)) {
+      errors.pasteWithFormattingShortcut = "Use a shortcut like CommandOrControl+Shift+Return.";
+    } else {
+      settings.pasteWithFormattingShortcut = shortcut;
+    }
+  }
+
+  if ("popupPosition" in patch) {
+    if (typeof patch.popupPosition === "string" && validPopupPositions.includes(patch.popupPosition as PopupPositionMode)) {
+      settings.popupPosition = patch.popupPosition as PopupPositionMode;
+    } else {
+      errors.popupPosition = "Choose cursor, bottom, top, center, or last position.";
     }
   }
 

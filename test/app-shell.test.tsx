@@ -96,6 +96,7 @@ function installClipboardApi(clips = createClips()) {
       settingsChangedCallback = callback;
       return () => undefined;
     }),
+    openSettings: vi.fn(async () => undefined),
     openPopup: () => {
       popupOpenedCallback?.(currentClips);
     },
@@ -118,7 +119,11 @@ function installClipboardApi(clips = createClips()) {
       }
 
       currentSettings = {
-        globalHotkey: typeof patch.globalHotkey === "string" ? patch.globalHotkey : currentSettings.globalHotkey,
+        ...currentSettings,
+        checkForUpdatesAutomatically:
+          typeof patch.checkForUpdatesAutomatically === "boolean"
+            ? patch.checkForUpdatesAutomatically
+            : currentSettings.checkForUpdatesAutomatically,
         historyLimit:
           typeof patch.historyLimit === "number"
             ? patch.historyLimit
@@ -139,6 +144,26 @@ function installClipboardApi(clips = createClips()) {
                 ? Number(patch.popupSize.height)
                 : currentSettings.popupSize.height
         },
+        openClipboardHistoryShortcut:
+          typeof patch.openClipboardHistoryShortcut === "string"
+            ? patch.openClipboardHistoryShortcut
+            : currentSettings.openClipboardHistoryShortcut,
+        launchAtLogin:
+          typeof patch.launchAtLogin === "boolean" ? patch.launchAtLogin : currentSettings.launchAtLogin,
+        pasteAutomatically:
+          typeof patch.pasteAutomatically === "boolean" ? patch.pasteAutomatically : currentSettings.pasteAutomatically,
+        pasteWithFormattingShortcut:
+          typeof patch.pasteWithFormattingShortcut === "string"
+            ? patch.pasteWithFormattingShortcut
+            : currentSettings.pasteWithFormattingShortcut,
+        popupPosition:
+          patch.popupPosition === "cursor" ||
+          patch.popupPosition === "bottom" ||
+          patch.popupPosition === "top" ||
+          patch.popupPosition === "center" ||
+          patch.popupPosition === "last-position"
+            ? patch.popupPosition
+            : currentSettings.popupPosition,
         theme:
           patch.theme === "system" || patch.theme === "light" || patch.theme === "dark"
             ? patch.theme
@@ -159,92 +184,61 @@ function installClipboardApi(clips = createClips()) {
 
 describe("CopClip app shell", () => {
   it("shows the desktop shell for normal app usage", async () => {
-    installClipboardApi();
+    const api = installClipboardApi();
     window.history.pushState({}, "", "/?surface=desktop");
 
     render(<App />);
 
     expect(screen.getByLabelText("CopClip desktop shell")).toBeInTheDocument();
     expect(screen.getByLabelText("CopClip navigation")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Advanced" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /Privacy/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Shortcuts/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Subscription/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Clipboard popup")).not.toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText("2 clips")).toBeInTheDocument();
-      expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
-    });
+    expect(screen.queryByText("Recent Clips")).not.toBeInTheDocument();
+    expect(api.listClipboardHistory).not.toHaveBeenCalled();
   });
 
-  it("limits the desktop recent clips list to the three latest clips", async () => {
+  it("navigates between separate desktop settings pages", async () => {
+    installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Privacy/ }));
+    expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
+    expect(screen.getByText("Ignore Applications")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
+    expect(screen.getByRole("heading", { name: "Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Activate Paste")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Subscription/ }));
+    expect(screen.getByRole("heading", { name: "Subscription" })).toBeInTheDocument();
+    expect(screen.getByText("Local build")).toBeInTheDocument();
+  });
+
+  it("opens a requested desktop settings page from the hash", () => {
     installClipboardApi(createManyClips());
-    window.history.pushState({}, "", "/?surface=desktop");
+    window.history.pushState({}, "", "/?surface=desktop#privacy");
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText("3 shown")).toBeInTheDocument();
-      expect(screen.getAllByText("Recent clip 1").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Recent clip 2").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Recent clip 3").length).toBeGreaterThan(0);
-      expect(screen.queryAllByText("Recent clip 4")).toHaveLength(0);
-      expect(screen.queryAllByText("Recent clip 5")).toHaveLength(0);
-    });
+    expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Privacy/ })).toHaveAttribute("aria-current", "page");
   });
 
-  it("renders desktop image clips with the constrained thumbnail class", async () => {
-    installClipboardApi([
-      {
-        id: "clip-image",
-        type: "image",
-        imageDataUrl: pngDataUrl,
-        width: 460,
-        height: 996,
-        preview: "Image 460x996",
-        capturedAt: new Date(Date.UTC(2026, 4, 1, 12)).toISOString()
-      }
-    ]);
+  it("keeps clipboard history out of the desktop settings window", () => {
+    const api = installClipboardApi(createManyClips());
     window.history.pushState({}, "", "/?surface=desktop");
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText("IMG · Image 460x996")).toBeInTheDocument();
-    });
-    expect(document.querySelector(".desktop-clip-thumbnail")).toHaveAttribute("src", pngDataUrl);
-  });
-
-  it("updates desktop shell history when clipboard text changes", async () => {
-    const api = installClipboardApi();
-    window.history.pushState({}, "", "/?surface=desktop");
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText("2 clips")).toBeInTheDocument();
-    });
-
-    api.replaceClips([
-      {
-        id: "clip-3",
-        type: "text",
-        text: "Desktop shell clip",
-        preview: "Desktop shell clip",
-        capturedAt: new Date(Date.UTC(2026, 4, 1, 16)).toISOString()
-      },
-      ...createClips()
-    ]);
-
-    act(() => {
-      api.emitHistoryChanged();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("3 clips")).toBeInTheDocument();
-      expect(screen.getAllByText("Desktop shell clip").length).toBeGreaterThan(0);
-    });
+    expect(api.listClipboardHistory).not.toHaveBeenCalled();
+    expect(screen.queryByText("Recent clip 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Clipboard history")).not.toBeInTheDocument();
   });
 
   it("shows the compact clipboard popup without the full window shell", () => {
@@ -283,6 +277,7 @@ describe("CopClip app shell", () => {
       "onClipboardHistoryChanged",
       "onClipboardPopupOpened",
       "onSettingsChanged",
+      "openSettings",
       "restoreClipboardItem",
       "updateSettings"
     ]);
@@ -294,19 +289,43 @@ describe("CopClip app shell", () => {
 
     render(<App />);
 
-    const hotkeyInput = await screen.findByDisplayValue("CommandOrControl+Shift+V");
-    fireEvent.change(hotkeyInput, {
-      target: {
-        value: "CommandOrControl+Alt+V"
-      }
-    });
-    fireEvent.blur(hotkeyInput);
+    fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
+    const hotkeyInput = await screen.findByLabelText("Activate Paste");
+    fireEvent.keyDown(hotkeyInput, { altKey: true, ctrlKey: true, key: "v" });
 
     await waitFor(() => {
       expect(api.updateSettings).toHaveBeenCalledWith({
-        globalHotkey: "CommandOrControl+Alt+V"
+        openClipboardHistoryShortcut: "CommandOrControl+Alt+V"
       });
       expect(screen.getByText("Saved")).toBeInTheDocument();
+    });
+  });
+
+  it("updates Maccy-style behavior settings", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByLabelText("Open at login"));
+    fireEvent.click(screen.getByLabelText("To clipboard"));
+    fireEvent.change(screen.getByLabelText("Popup location"), {
+      target: { value: "bottom" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
+    fireEvent.keyDown(screen.getByLabelText("Activate Paste Stack"), {
+      key: "Enter",
+      metaKey: true,
+      shiftKey: true
+    });
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({ launchAtLogin: true });
+      expect(api.updateSettings).toHaveBeenCalledWith({ pasteAutomatically: false });
+      expect(api.updateSettings).toHaveBeenCalledWith({ popupPosition: "bottom" });
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        pasteWithFormattingShortcut: "CommandOrControl+Shift+Return"
+      });
     });
   });
 
@@ -325,7 +344,7 @@ describe("CopClip app shell", () => {
     fireEvent.blur(historyLimitInput);
 
     await waitFor(() => {
-      expect(screen.getByText("Check values")).toBeInTheDocument();
+      expect(screen.getAllByText("Check values").length).toBeGreaterThan(0);
       expect(screen.getByText("Use a number from 1 to 5000.")).toBeInTheDocument();
     });
   });
@@ -405,6 +424,37 @@ describe("CopClip app shell", () => {
     await waitFor(() => {
       expect(api.restoreClipboardItem).toHaveBeenCalledWith("clip-2");
     });
+  });
+
+  it("restores the selected popup item with the paste-with-formatting shortcut", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+    fireEvent.keyDown(window, { key: "Enter", metaKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(api.restoreClipboardItem).toHaveBeenCalledWith("clip-1");
+    });
+  });
+
+  it("opens settings from the clipboard popup with Command comma", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+    fireEvent.keyDown(window, { key: ",", metaKey: true });
+
+    await waitFor(() => {
+      expect(api.openSettings).toHaveBeenCalledOnce();
+    });
+    expect(api.restoreClipboardItem).not.toHaveBeenCalled();
   });
 
   it("restores visible results with number shortcuts", async () => {
