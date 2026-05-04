@@ -1,4 +1,4 @@
-export type ClipboardItemType = "text" | "link" | "image";
+export type ClipboardItemType = "text" | "link" | "html" | "image";
 
 type ClipboardBaseItem = {
   id: string;
@@ -19,6 +19,12 @@ export type ClipboardLinkItem = ClipboardBaseItem & {
   url: string;
 };
 
+export type ClipboardHtmlItem = ClipboardBaseItem & {
+  type: "html";
+  text: string;
+  html: string;
+};
+
 export type ClipboardImageItem = ClipboardBaseItem & {
   type: "image";
   imageDataUrl: string;
@@ -26,7 +32,12 @@ export type ClipboardImageItem = ClipboardBaseItem & {
   height: number;
 };
 
-export type ClipboardItem = ClipboardTextItem | ClipboardLinkItem | ClipboardImageItem;
+export type ClipboardItem = ClipboardTextItem | ClipboardLinkItem | ClipboardHtmlItem | ClipboardImageItem;
+
+export type ClipboardHtmlPayload = {
+  html: string;
+  text: string;
+};
 
 export type ClipboardImagePayload = {
   imageDataUrl: string;
@@ -35,6 +46,7 @@ export type ClipboardImagePayload = {
 };
 
 export type ClipboardHistory = {
+  captureHtml: (payload: ClipboardHtmlPayload) => ClipboardHtmlItem | null;
   captureImage: (image: ClipboardImagePayload) => ClipboardImageItem | null;
   captureText: (text: string) => ClipboardTextItem | ClipboardLinkItem | null;
   clear: () => void;
@@ -77,6 +89,45 @@ export function normalizeClipboardLink(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+function decodeBasicHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+export function plainTextFromHtml(html: string): string {
+  return decodeBasicHtmlEntities(
+    html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<[^>]+>/g, " ")
+  );
+}
+
+export function normalizeClipboardHtml(payload: ClipboardHtmlPayload): ClipboardHtmlPayload | null {
+  const html = payload.html.replace(/\r\n/g, "\n").trim();
+
+  if (!html) {
+    return null;
+  }
+
+  const text = normalizeClipboardText(payload.text) ?? normalizeClipboardText(plainTextFromHtml(html));
+
+  if (!text) {
+    return null;
+  }
+
+  return {
+    html,
+    text
+  };
 }
 
 function base64ByteLength(value: string): number | null {
@@ -140,7 +191,11 @@ export function clipboardItemSearchText(item: ClipboardItem): string {
     return item.preview;
   }
 
-  return item.type === "link" ? `${item.text} ${item.url} ${item.preview}` : `${item.text} ${item.preview}`;
+  if (item.type === "link") {
+    return `${item.text} ${item.url} ${item.preview}`;
+  }
+
+  return item.type === "html" ? `${item.text} ${plainTextFromHtml(item.html)} ${item.preview}` : `${item.text} ${item.preview}`;
 }
 
 export function createClipboardHistory(options: ClipboardHistoryOptions = {}): ClipboardHistory {
@@ -222,6 +277,48 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
           capturedAt,
           pinned: false
         };
+
+    items.unshift(item);
+    pruneHistory();
+    sortHistory();
+    return item;
+  }
+
+  function captureHtml(payload: ClipboardHtmlPayload): ClipboardHtmlItem | null {
+    const normalized = normalizeClipboardHtml(payload);
+
+    if (!normalized) {
+      return null;
+    }
+
+    const existingIndex = items.findIndex((item) => item.type === "html" && item.html === normalized.html);
+    const capturedAt = now().toISOString();
+    const preview = previewText(normalized.text, previewLength);
+
+    if (existingIndex >= 0) {
+      const existing = items[existingIndex] as ClipboardHtmlItem;
+      items.splice(existingIndex, 1);
+      const updated: ClipboardHtmlItem = {
+        ...existing,
+        text: normalized.text,
+        preview,
+        capturedAt
+      };
+
+      items.unshift(updated);
+      sortHistory();
+      return updated;
+    }
+
+    const item: ClipboardHtmlItem = {
+      id: createId(),
+      type: "html",
+      text: normalized.text,
+      html: normalized.html,
+      preview,
+      capturedAt,
+      pinned: false
+    };
 
     items.unshift(item);
     pruneHistory();
@@ -333,6 +430,7 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
   }
 
   return {
+    captureHtml,
     captureImage,
     captureText,
     clear,

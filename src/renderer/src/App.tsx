@@ -29,6 +29,10 @@ function clipKindLabel(item: ClipboardItem): string {
     return "IMG";
   }
 
+  if (item.type === "html") {
+    return "HTML";
+  }
+
   return item.type === "link" ? "URL" : "TXT";
 }
 

@@ -61,6 +61,15 @@ function createMixedClips(): ClipboardItem[] {
       pinned: false
     },
     {
+      id: "clip-html",
+      type: "html",
+      text: "Formatted release note",
+      html: "<p><strong>Formatted</strong> release note</p>",
+      preview: "Formatted release note",
+      capturedAt,
+      pinned: false
+    },
+    {
       id: "clip-image",
       type: "image",
       imageDataUrl: pngDataUrl,
@@ -317,7 +326,9 @@ describe("CopClip app shell", () => {
         name: /Restore clipboard item 1: https:\/\/example.com\/docs/
       })).toBeInTheDocument();
       expect(screen.getByText("URL")).toBeInTheDocument();
+      expect(screen.getByText("HTML")).toBeInTheDocument();
       expect(screen.getByText("IMG")).toBeInTheDocument();
+      expect(screen.getAllByText("Formatted release note").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Image 1x1").length).toBeGreaterThan(0);
     });
     expect(document.querySelector(".clip-image-preview img")).toHaveAttribute("src", pngDataUrl);

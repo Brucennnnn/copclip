@@ -5,9 +5,11 @@ import {
   isClipboardImageWithinLimits,
   maxClipboardImageBytes,
   maxClipboardImagePixels,
+  normalizeClipboardHtml,
   normalizeClipboardImage,
   normalizeClipboardLink,
   normalizeClipboardText,
+  plainTextFromHtml,
   previewText
 } from "../src/shared/clipboard-history";
 
@@ -67,6 +69,35 @@ describe("clipboard text history", () => {
       text: "https://example.com/docs",
       url: "https://example.com/docs"
     });
+  });
+
+  it("normalizes copied HTML to safe preview text", () => {
+    expect(plainTextFromHtml("<p>Hello <strong>team</strong></p><script>alert('x')</script>")).not.toContain("alert");
+    expect(normalizeClipboardHtml({ html: "<p>Bold &amp; useful</p>", text: "" })).toEqual({
+      html: "<p>Bold &amp; useful</p>",
+      text: "Bold & useful"
+    });
+    expect(normalizeClipboardHtml({ html: "   ", text: "fallback" })).toBeNull();
+  });
+
+  it("captures, deduplicates, and searches copied HTML", () => {
+    let timestamp = 0;
+    const history = createClipboardHistory({
+      createId: () => `clip-html-${timestamp}`,
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, timestamp++))
+    });
+
+    const first = history.captureHtml({ html: "<p><strong>Release</strong> checklist</p>", text: "Release checklist" });
+    const repeated = history.captureHtml({ html: "<p><strong>Release</strong> checklist</p>", text: "Updated fallback" });
+
+    expect(repeated?.id).toBe(first?.id);
+    expect(history.list()[0]).toMatchObject({
+      type: "html",
+      text: "Updated fallback",
+      html: "<p><strong>Release</strong> checklist</p>",
+      preview: "Updated fallback"
+    });
+    expect(itemLabels(history.list("release"))).toEqual(["Updated fallback"]);
   });
 
   it("captures and deduplicates copied images", () => {

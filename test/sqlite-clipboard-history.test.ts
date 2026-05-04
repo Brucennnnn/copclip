@@ -33,7 +33,7 @@ describe("sqlite clipboard text history", () => {
     history.close?.();
 
     const database = new Database(databasePath);
-    expect(database.pragma("user_version", { simple: true })).toBe(2);
+    expect(database.pragma("user_version", { simple: true })).toBe(3);
     expect(
       database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'clipboard_items'").get()
     ).toEqual({ name: "clipboard_items" });
@@ -72,6 +72,28 @@ describe("sqlite clipboard text history", () => {
       text: "https://example.com/docs",
       url: "https://example.com/docs"
     });
+    secondHistory.close?.();
+  });
+
+  it("persists copied HTML with plain text preview metadata", () => {
+    const databasePath = createDatabasePath();
+    const firstHistory = createSqliteClipboardHistory(databasePath, {
+      createId: () => "clip-html",
+      now: () => new Date(Date.UTC(2026, 4, 1, 12))
+    });
+
+    firstHistory.captureHtml({ html: "<p><strong>Release</strong> checklist</p>", text: "Release checklist" });
+    firstHistory.close?.();
+
+    const secondHistory = createSqliteClipboardHistory(databasePath);
+    expect(secondHistory.list()[0]).toMatchObject({
+      id: "clip-html",
+      type: "html",
+      text: "Release checklist",
+      html: "<p><strong>Release</strong> checklist</p>",
+      preview: "Release checklist"
+    });
+    expect(itemLabels(secondHistory.list("strong"))).toEqual(["Release checklist"]);
     secondHistory.close?.();
   });
 
@@ -137,7 +159,52 @@ describe("sqlite clipboard text history", () => {
     history.close?.();
 
     const migratedDatabase = new Database(databasePath);
-    expect(migratedDatabase.pragma("user_version", { simple: true })).toBe(2);
+    expect(migratedDatabase.pragma("user_version", { simple: true })).toBe(3);
+    migratedDatabase.close();
+  });
+
+  it("migrates existing typed history to the HTML-capable schema", () => {
+    const databasePath = createDatabasePath();
+    const database = new Database(databasePath);
+    database.exec(`
+      CREATE TABLE clipboard_items (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('text', 'link', 'image')),
+        text TEXT,
+        url TEXT,
+        preview TEXT NOT NULL,
+        image_data BLOB,
+        image_width INTEGER,
+        image_height INTEGER,
+        content_key TEXT NOT NULL UNIQUE,
+        captured_at TEXT NOT NULL,
+        pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+        CHECK (
+          (type = 'text' AND text IS NOT NULL AND url IS NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
+          (type = 'link' AND text IS NOT NULL AND url IS NOT NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
+          (type = 'image' AND text IS NULL AND url IS NULL AND image_data IS NOT NULL AND image_width IS NOT NULL AND image_height IS NOT NULL)
+        )
+      );
+
+      INSERT INTO clipboard_items (id, type, text, url, preview, image_data, image_width, image_height, content_key, captured_at, pinned)
+      VALUES ('typed-link', 'link', 'https://example.com/docs', 'https://example.com/docs', 'https://example.com/docs', NULL, NULL, NULL, 'link:https://example.com/docs', '2026-05-01T12:00:00.000Z', 1);
+
+      PRAGMA user_version = 2;
+    `);
+    database.close();
+
+    const history = createSqliteClipboardHistory(databasePath);
+
+    expect(history.list()[0]).toMatchObject({
+      id: "typed-link",
+      type: "link",
+      pinned: true,
+      text: "https://example.com/docs"
+    });
+    history.close?.();
+
+    const migratedDatabase = new Database(databasePath);
+    expect(migratedDatabase.pragma("user_version", { simple: true })).toBe(3);
     migratedDatabase.close();
   });
 

@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { BrowserWindow, clipboard, ipcMain, nativeImage, type IpcMainInvokeEvent } from "electron";
 import {
   createClipboardHistory,
+  normalizeClipboardHtml,
   normalizeClipboardText,
   type ClipboardHistory,
+  type ClipboardHtmlPayload,
   type ClipboardImagePayload,
   type ClipboardItem,
   isClipboardImageWithinLimits,
@@ -138,6 +140,10 @@ function imageSignature(buffer: Buffer): string {
   return `image:${hashBuffer(buffer)}`;
 }
 
+function htmlSignature(html: string): string {
+  return `html:${createHash("sha256").update(html).digest("hex")}`;
+}
+
 function imagePayloadFromClipboard(): { payload: ClipboardImagePayload; signature: string } | null {
   const image = clipboard.readImage();
 
@@ -187,6 +193,15 @@ function imagePayloadFromClipboard(): { payload: ClipboardImagePayload; signatur
   };
 }
 
+function htmlPayloadFromClipboard(): { payload: ClipboardHtmlPayload; signature: string } | null {
+  const payload = normalizeClipboardHtml({
+    html: clipboard.readHTML(),
+    text: clipboard.readText()
+  });
+
+  return payload ? { payload, signature: htmlSignature(payload.html) } : null;
+}
+
 export function captureCurrentClipboardItem(options: { force?: boolean } = {}): ClipboardItem[] {
   const image = imagePayloadFromClipboard();
 
@@ -214,6 +229,36 @@ export function captureCurrentClipboardItem(options: { force?: boolean } = {}): 
       sendClipboardHistoryChanged(items);
     } else {
       debugLog("capture", "clipboard image ignored by normalizer", { historyCount: items.length });
+    }
+
+    return items;
+  }
+
+  const html = htmlPayloadFromClipboard();
+
+  if (html) {
+    const unchanged = html.signature === lastObservedSignature;
+    debugLog("capture", "read clipboard html", {
+      force: Boolean(options.force),
+      unchanged,
+      ...textSummary(html.payload.text)
+    });
+
+    if (!options.force && unchanged) {
+      debugLog("capture", "skip unchanged clipboard", { historyCount: clipboardHistory.list().length });
+      return clipboardHistory.list();
+    }
+
+    lastObservedSignature = html.signature;
+
+    const capturedItem = clipboardHistory.captureHtml(html.payload);
+    const items = clipboardHistory.list();
+
+    if (capturedItem) {
+      debugLog("capture", "captured clipboard html", { itemId: capturedItem.id, historyCount: items.length });
+      sendClipboardHistoryChanged(items);
+    } else {
+      debugLog("capture", "clipboard html ignored by normalizer", { historyCount: items.length });
     }
 
     return items;
@@ -296,6 +341,9 @@ export function registerClipboardHistoryIpc({ isTrustedSender }: ClipboardHistor
 
       clipboard.writeImage(image);
       lastObservedSignature = imageSignature(image.toPNG());
+    } else if (item.type === "html") {
+      clipboard.write({ html: item.html, text: item.text });
+      lastObservedSignature = htmlSignature(item.html);
     } else {
       clipboard.writeText(item.text);
       lastObservedSignature = textSignature(item.text);

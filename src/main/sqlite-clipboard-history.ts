@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
 import {
+  normalizeClipboardHtml,
   normalizeClipboardImage,
   normalizeClipboardLink,
   normalizeClipboardText,
   previewImage,
   previewText,
   type ClipboardHistory,
+  type ClipboardHtmlItem,
+  type ClipboardHtmlPayload,
   type ClipboardImageItem,
   type ClipboardImagePayload,
   type ClipboardItem,
@@ -26,6 +29,7 @@ type ClipboardRow = {
   id: string;
   type: ClipboardItemType;
   text: string | null;
+  html: string | null;
   url: string | null;
   preview: string;
   image_data: Buffer | null;
@@ -44,7 +48,11 @@ type LegacyClipboardRow = {
   pinned: 0 | 1;
 };
 
-const schemaVersion = 2;
+type TypedClipboardRow = ClipboardRow & {
+  html?: string | null;
+};
+
+const schemaVersion = 3;
 const defaultPreviewLength = 140;
 const defaultHistoryLimit = 100;
 const pngDataUrlPrefix = "data:image/png;base64,";
@@ -52,8 +60,9 @@ const pngDataUrlPrefix = "data:image/png;base64,";
 const createSchemaSql = `
   CREATE TABLE IF NOT EXISTS clipboard_items (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('text', 'link', 'image')),
+    type TEXT NOT NULL CHECK (type IN ('text', 'link', 'html', 'image')),
     text TEXT,
+    html TEXT,
     url TEXT,
     preview TEXT NOT NULL,
     image_data BLOB,
@@ -63,9 +72,10 @@ const createSchemaSql = `
     captured_at TEXT NOT NULL,
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     CHECK (
-      (type = 'text' AND text IS NOT NULL AND url IS NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
-      (type = 'link' AND text IS NOT NULL AND url IS NOT NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
-      (type = 'image' AND text IS NULL AND url IS NULL AND image_data IS NOT NULL AND image_width IS NOT NULL AND image_height IS NOT NULL)
+      (type = 'text' AND text IS NOT NULL AND html IS NULL AND url IS NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
+      (type = 'link' AND text IS NOT NULL AND html IS NULL AND url IS NOT NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
+      (type = 'html' AND text IS NOT NULL AND html IS NOT NULL AND url IS NULL AND image_data IS NULL AND image_width IS NULL AND image_height IS NULL) OR
+      (type = 'image' AND text IS NULL AND html IS NULL AND url IS NULL AND image_data IS NOT NULL AND image_width IS NOT NULL AND image_height IS NOT NULL)
     )
   );
 
@@ -79,6 +89,10 @@ function hashBuffer(buffer: Buffer): string {
 
 function textContentKey(type: "text" | "link", text: string, url: string | null): string {
   return type === "link" && url ? `link:${url}` : `text:${text}`;
+}
+
+function htmlContentKey(html: string): string {
+  return `html:${createHash("sha256").update(html).digest("hex")}`;
 }
 
 function imageContentKey(buffer: Buffer): string {
@@ -106,6 +120,18 @@ function toClipboardItem(row: ClipboardRow): ClipboardItem {
       imageDataUrl: toImageDataUrl(row.image_data ?? Buffer.alloc(0)),
       width: row.image_width ?? 0,
       height: row.image_height ?? 0,
+      capturedAt: row.captured_at,
+      pinned: row.pinned === 1
+    };
+  }
+
+  if (row.type === "html") {
+    return {
+      id: row.id,
+      type: "html",
+      text: row.text ?? "",
+      html: row.html ?? "",
+      preview: row.preview,
       capturedAt: row.captured_at,
       pinned: row.pinned === 1
     };
@@ -155,6 +181,7 @@ function legacyRowToInsertParams(row: LegacyClipboardRow, previewLength: number)
     id: row.id,
     type,
     text: normalized,
+    html: null,
     url,
     preview: previewText(normalized, previewLength),
     imageData: null,
@@ -164,6 +191,80 @@ function legacyRowToInsertParams(row: LegacyClipboardRow, previewLength: number)
     capturedAt: row.captured_at,
     pinned: row.pinned
   };
+}
+
+function typedRowToInsertParams(row: TypedClipboardRow, previewLength: number) {
+  if (row.type === "image") {
+    if (!row.image_data || !row.image_width || !row.image_height) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      type: "image",
+      text: null,
+      html: null,
+      url: null,
+      preview: row.preview,
+      imageData: row.image_data,
+      imageWidth: row.image_width,
+      imageHeight: row.image_height,
+      contentKey: row.content_key,
+      capturedAt: row.captured_at,
+      pinned: row.pinned
+    };
+  }
+
+  if (row.type === "html") {
+    const normalized = normalizeClipboardHtml({ html: row.html ?? "", text: row.text ?? "" });
+
+    if (!normalized) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      type: "html",
+      text: normalized.text,
+      html: normalized.html,
+      url: null,
+      preview: previewText(normalized.text, previewLength),
+      imageData: null,
+      imageWidth: null,
+      imageHeight: null,
+      contentKey: htmlContentKey(normalized.html),
+      capturedAt: row.captured_at,
+      pinned: row.pinned
+    };
+  }
+
+  const normalized = normalizeClipboardText(row.text ?? "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const url = row.type === "link" ? normalizeClipboardLink(row.url ?? normalized) : null;
+  const type = url ? "link" : "text";
+
+  return {
+    id: row.id,
+    type,
+    text: normalized,
+    html: null,
+    url,
+    preview: previewText(normalized, previewLength),
+    imageData: null,
+    imageWidth: null,
+    imageHeight: null,
+    contentKey: textContentKey(type, normalized, url),
+    capturedAt: row.captured_at,
+    pinned: row.pinned
+  };
+}
+
+function tableColumnNames(database: Database.Database): Set<string> {
+  return new Set((database.prepare("PRAGMA table_info(clipboard_items)").all() as Array<{ name: string }>).map((column) => column.name));
 }
 
 function ensureSchema(database: Database.Database, previewLength: number): void {
@@ -181,11 +282,18 @@ function ensureSchema(database: Database.Database, previewLength: number): void 
     return;
   }
 
-  const legacyRows = database.prepare("SELECT id, text, preview, captured_at, pinned FROM clipboard_items").all() as LegacyClipboardRow[];
+  const columns = tableColumnNames(database);
+  const typedRows = columns.has("content_key")
+    ? database.prepare("SELECT id, type, text, NULL AS html, url, preview, image_data, image_width, image_height, content_key, captured_at, pinned FROM clipboard_items").all() as TypedClipboardRow[]
+    : [];
+  const legacyRows = columns.has("content_key")
+    ? []
+    : database.prepare("SELECT id, text, preview, captured_at, pinned FROM clipboard_items").all() as LegacyClipboardRow[];
   const migrate = database.transaction(() => {
     database.exec(`
       DROP TABLE IF EXISTS clipboard_items_legacy;
       ALTER TABLE clipboard_items RENAME TO clipboard_items_legacy;
+      DROP INDEX IF EXISTS clipboard_items_order_idx;
     `);
     database.exec(createSchemaSql);
 
@@ -194,6 +302,7 @@ function ensureSchema(database: Database.Database, previewLength: number): void 
         id,
         type,
         text,
+        html,
         url,
         preview,
         image_data,
@@ -207,6 +316,7 @@ function ensureSchema(database: Database.Database, previewLength: number): void 
         @id,
         @type,
         @text,
+        @html,
         @url,
         @preview,
         @imageData,
@@ -220,6 +330,14 @@ function ensureSchema(database: Database.Database, previewLength: number): void 
 
     for (const row of legacyRows) {
       const params = legacyRowToInsertParams(row, previewLength);
+
+      if (params) {
+        insertMigratedStatement.run(params);
+      }
+    }
+
+    for (const row of typedRows) {
+      const params = typedRowToInsertParams(row, previewLength);
 
       if (params) {
         insertMigratedStatement.run(params);
@@ -254,6 +372,7 @@ export function createSqliteClipboardHistory(
       id,
       type,
       text,
+      html,
       url,
       preview,
       image_data,
@@ -266,6 +385,7 @@ export function createSqliteClipboardHistory(
       @id,
       @type,
       @text,
+      @html,
       @url,
       @preview,
       @imageData,
@@ -278,6 +398,7 @@ export function createSqliteClipboardHistory(
   const updateExistingStatement = database.prepare(`
     UPDATE clipboard_items
     SET text = @text,
+        html = @html,
         url = @url,
         preview = @preview,
         image_data = @imageData,
@@ -292,7 +413,7 @@ export function createSqliteClipboardHistory(
   `);
   const searchStatement = database.prepare(`
     SELECT * FROM clipboard_items
-    WHERE lower(coalesce(text, '') || ' ' || coalesce(url, '') || ' ' || preview) LIKE @query ESCAPE '\\'
+    WHERE lower(coalesce(text, '') || ' ' || coalesce(html, '') || ' ' || coalesce(url, '') || ' ' || preview) LIKE @query ESCAPE '\\'
     ORDER BY pinned DESC, captured_at DESC
   `);
   const deleteStatement = database.prepare("DELETE FROM clipboard_items WHERE id = ?");
@@ -337,6 +458,7 @@ export function createSqliteClipboardHistory(
       updateExistingStatement.run({
         id: existing.id,
         text: normalized,
+        html: null,
         url,
         preview,
         imageData: null,
@@ -353,6 +475,7 @@ export function createSqliteClipboardHistory(
       id,
       type,
       text: normalized,
+      html: null,
       url,
       preview,
       imageData: null,
@@ -363,6 +486,52 @@ export function createSqliteClipboardHistory(
     });
     pruneHistory();
     return findById(id) as ClipboardTextItem | ClipboardLinkItem | null;
+  }
+
+  function captureHtml(payload: ClipboardHtmlPayload): ClipboardHtmlItem | null {
+    const normalized = normalizeClipboardHtml(payload);
+
+    if (!normalized) {
+      return null;
+    }
+
+    const capturedAt = now().toISOString();
+    const preview = previewText(normalized.text, previewLength);
+    const contentKey = htmlContentKey(normalized.html);
+    const existing = findByContentKeyStatement.get(contentKey) as ClipboardRow | undefined;
+
+    if (existing) {
+      updateExistingStatement.run({
+        id: existing.id,
+        text: normalized.text,
+        html: normalized.html,
+        url: null,
+        preview,
+        imageData: null,
+        imageWidth: null,
+        imageHeight: null,
+        capturedAt
+      });
+      pruneHistory();
+      return findById(existing.id) as ClipboardHtmlItem | null;
+    }
+
+    const id = createId();
+    insertStatement.run({
+      id,
+      type: "html",
+      text: normalized.text,
+      html: normalized.html,
+      url: null,
+      preview,
+      imageData: null,
+      imageWidth: null,
+      imageHeight: null,
+      contentKey,
+      capturedAt
+    });
+    pruneHistory();
+    return findById(id) as ClipboardHtmlItem | null;
   }
 
   function captureImage(image: ClipboardImagePayload): ClipboardImageItem | null {
@@ -387,6 +556,7 @@ export function createSqliteClipboardHistory(
       updateExistingStatement.run({
         id: existing.id,
         text: null,
+        html: null,
         url: null,
         preview,
         imageData,
@@ -403,6 +573,7 @@ export function createSqliteClipboardHistory(
       id,
       type: "image",
       text: null,
+      html: null,
       url: null,
       preview,
       imageData,
@@ -450,6 +621,7 @@ export function createSqliteClipboardHistory(
   }
 
   return {
+    captureHtml,
     captureImage,
     captureText,
     clear,

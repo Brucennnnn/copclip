@@ -3,12 +3,14 @@ import { maxClipboardImagePixels, type ClipboardItem } from "../src/shared/clipb
 import { ipcChannels } from "../src/shared/ipc-channels";
 
 let clipboardText = "";
+let clipboardHtml = "";
 const windows: unknown[] = [];
 const ipcHandlers = new Map<string, (...args: never[]) => unknown>();
 const pngData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 const pngDataUrl = `data:image/png;base64,${pngData}`;
 const pngBuffer = Buffer.from(pngData, "base64");
 const writeText = vi.fn();
+const writeClipboard = vi.fn();
 const writeImage = vi.fn();
 const hideWindow = vi.fn();
 const isTrustedAccessibilityClient = vi.fn(() => true);
@@ -63,8 +65,10 @@ vi.mock("electron", () => ({
     getAllWindows: () => windows
   },
   clipboard: {
+    readHTML: () => clipboardHtml,
     readImage: () => clipboardImage,
     readText: () => clipboardText,
+    write: writeClipboard,
     writeImage,
     writeText
   },
@@ -94,6 +98,7 @@ describe("clipboard capture", () => {
   beforeEach(() => {
     stubPlatform(originalPlatform);
     clipboardText = "";
+    clipboardHtml = "";
     clipboardImage = createEmptyImage();
     windows.length = 0;
     ipcHandlers.clear();
@@ -156,6 +161,7 @@ describe("clipboard capture", () => {
 
   it("captures clipboard images before falling back to text", async () => {
     clipboardText = "image fallback text";
+    clipboardHtml = "<p>HTML fallback</p>";
     clipboardImage = createClipboardImage();
     const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
 
@@ -167,6 +173,34 @@ describe("clipboard capture", () => {
       imageDataUrl: pngDataUrl,
       width: 1,
       height: 1
+    });
+  });
+
+  it("captures clipboard HTML before falling back to plain text", async () => {
+    clipboardText = "Release checklist";
+    clipboardHtml = "<p><strong>Release</strong> checklist</p>";
+    const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
+
+    captureCurrentClipboardItem({ force: true });
+
+    expect(clipboardHistory.list()[0]).toMatchObject({
+      type: "html",
+      text: "Release checklist",
+      html: "<p><strong>Release</strong> checklist</p>",
+      preview: "Release checklist"
+    });
+  });
+
+  it("falls back to text when clipboard HTML is unsupported", async () => {
+    clipboardText = "plain fallback";
+    clipboardHtml = "   ";
+    const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
+
+    captureCurrentClipboardItem({ force: true });
+
+    expect(clipboardHistory.list()[0]).toMatchObject({
+      type: "text",
+      text: "plain fallback"
     });
   });
 
@@ -308,6 +342,28 @@ describe("clipboard capture", () => {
       { timeout: 3000 },
       expect.any(Function)
     );
+  });
+
+  it("restores HTML history items with a plain-text fallback", async () => {
+    stubPlatform("darwin");
+    vi.useFakeTimers();
+    clipboardText = "Release checklist";
+    clipboardHtml = "<p><strong>Release</strong> checklist</p>";
+    const { capturePasteTargetApplication } = await import("../src/main/auto-paste");
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    capturePasteTargetApplication();
+    const [item] = captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+    const restore = ipcHandlers.get(ipcChannels.clipboardHistoryRestore);
+
+    expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
+    expect(writeClipboard).toHaveBeenCalledWith({
+      html: "<p><strong>Release</strong> checklist</p>",
+      text: "Release checklist"
+    });
+    expect(writeText).not.toHaveBeenCalled();
+    expect(hideWindow).toHaveBeenCalledOnce();
   });
 
   it("still restores clipboard text when accessibility permission blocks auto-paste", async () => {
