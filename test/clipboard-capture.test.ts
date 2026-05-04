@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClipboardItem } from "../src/shared/clipboard-history";
+import { maxClipboardImagePixels, type ClipboardItem } from "../src/shared/clipboard-history";
+import { ipcChannels } from "../src/shared/ipc-channels";
 
 let clipboardText = "";
 const windows: unknown[] = [];
@@ -19,6 +20,7 @@ const execFile = vi.fn(
 );
 const execFileSync = vi.fn(() => "com.example.Editor\n");
 const originalPlatform = process.platform;
+const trustAllSenders = () => true;
 
 type MockNativeImage = {
   isEmpty: () => boolean;
@@ -34,11 +36,11 @@ function createEmptyImage(): MockNativeImage {
   };
 }
 
-function createClipboardImage(): MockNativeImage {
+function createClipboardImage(size = { width: 1, height: 1 }): MockNativeImage {
   return {
     isEmpty: () => false,
     toPNG: () => pngBuffer,
-    getSize: () => ({ width: 1, height: 1 })
+    getSize: () => size
   };
 }
 
@@ -168,6 +170,22 @@ describe("clipboard capture", () => {
     });
   });
 
+  it("skips oversized clipboard images before falling back to text", async () => {
+    clipboardText = "fallback text";
+    const toPNG = vi.fn(() => pngBuffer);
+    clipboardImage = {
+      isEmpty: () => false,
+      toPNG,
+      getSize: () => ({ width: maxClipboardImagePixels + 1, height: 1 })
+    };
+    const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
+
+    captureCurrentClipboardItem({ force: true });
+
+    expect(itemLabels(clipboardHistory.list())).toEqual(["fallback text"]);
+    expect(toPNG).not.toHaveBeenCalled();
+  });
+
   it("captures clipboard text without sending into renderer frames", async () => {
     clipboardText = "copied outside the app";
     const send = vi.fn(() => {
@@ -203,8 +221,8 @@ describe("clipboard capture", () => {
     };
     const { sendToLiveWindow } = await import("../src/main/clipboard-capture");
 
-    expect(sendToLiveWindow(window as never, "clipboard-popup:opened")).toBe(true);
-    expect(send).toHaveBeenCalledWith("clipboard-popup:opened");
+    expect(sendToLiveWindow(window as never, ipcChannels.clipboardPopupOpened)).toBe(true);
+    expect(send).toHaveBeenCalledWith(ipcChannels.clipboardPopupOpened);
   });
 
   it("notifies live popup windows when clipboard text changes", async () => {
@@ -225,7 +243,7 @@ describe("clipboard capture", () => {
     captureCurrentClipboardItem();
 
     expect(send).toHaveBeenCalledWith(
-      "clipboard-history:changed",
+      ipcChannels.clipboardHistoryChanged,
       expect.arrayContaining([
         expect.objectContaining({
           text: "copied outside the app"
@@ -243,8 +261,8 @@ describe("clipboard capture", () => {
 
     capturePasteTargetApplication();
     const [item] = captureCurrentClipboardItem({ force: true });
-    registerClipboardHistoryIpc();
-    const restore = ipcHandlers.get("clipboard-history:restore");
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+    const restore = ipcHandlers.get(ipcChannels.clipboardHistoryRestore);
 
     expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
     expect(writeText).toHaveBeenCalledWith("paste me");
@@ -275,8 +293,8 @@ describe("clipboard capture", () => {
 
     capturePasteTargetApplication();
     const [item] = captureCurrentClipboardItem({ force: true });
-    registerClipboardHistoryIpc();
-    const restore = ipcHandlers.get("clipboard-history:restore");
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+    const restore = ipcHandlers.get(ipcChannels.clipboardHistoryRestore);
 
     expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
     expect(writeImage).toHaveBeenCalledWith(expect.objectContaining({ isEmpty: expect.any(Function) }));
@@ -300,8 +318,8 @@ describe("clipboard capture", () => {
     const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
 
     const [item] = captureCurrentClipboardItem({ force: true });
-    registerClipboardHistoryIpc();
-    const restore = ipcHandlers.get("clipboard-history:restore");
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+    const restore = ipcHandlers.get(ipcChannels.clipboardHistoryRestore);
 
     expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
     expect(writeText).toHaveBeenCalledWith("copied but not pasted");
@@ -321,8 +339,8 @@ describe("clipboard capture", () => {
 
     configureAutoPaste({ pasteAutomatically: false });
     const [item] = captureCurrentClipboardItem({ force: true });
-    registerClipboardHistoryIpc();
-    const restore = ipcHandlers.get("clipboard-history:restore");
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+    const restore = ipcHandlers.get(ipcChannels.clipboardHistoryRestore);
 
     expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
     expect(writeText).toHaveBeenCalledWith("copy only");
@@ -330,5 +348,21 @@ describe("clipboard capture", () => {
     await vi.advanceTimersByTimeAsync(120);
 
     expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it("rejects clipboard history IPC from untrusted renderer senders", async () => {
+    const { registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+    const isTrustedSender = vi.fn(() => false);
+
+    registerClipboardHistoryIpc({ isTrustedSender });
+    const list = ipcHandlers.get(ipcChannels.clipboardHistoryList);
+    const event = {
+      senderFrame: {
+        url: "https://evil.example/"
+      }
+    };
+
+    expect(() => list?.(event as never, "" as never)).toThrow("Unauthorized IPC sender.");
+    expect(isTrustedSender).toHaveBeenCalledWith(event, ["desktop", "popup"]);
   });
 });

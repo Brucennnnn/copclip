@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   type ClipboardItem,
   createClipboardHistory,
+  isClipboardImageWithinLimits,
+  maxClipboardImageBytes,
+  maxClipboardImagePixels,
+  normalizeClipboardImage,
   normalizeClipboardLink,
   normalizeClipboardText,
   previewText
@@ -85,6 +89,13 @@ describe("clipboard text history", () => {
         height: 1
       })
     ]);
+  });
+
+  it("rejects invalid or oversized copied images", () => {
+    expect(normalizeClipboardImage({ imageDataUrl: "data:image/png;base64,not-valid", width: 1, height: 1 })).toBeNull();
+    expect(normalizeClipboardImage({ imageDataUrl: pngDataUrl, width: maxClipboardImagePixels + 1, height: 1 })).toBeNull();
+    expect(isClipboardImageWithinLimits(1, 1, maxClipboardImageBytes + 1)).toBe(false);
+    expect(isClipboardImageWithinLimits(1, 1, maxClipboardImageBytes)).toBe(true);
   });
 
   it("filters text history immediately with case-insensitive search", () => {

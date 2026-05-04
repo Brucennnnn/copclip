@@ -1,19 +1,32 @@
 import { createHash } from "node:crypto";
-import { BrowserWindow, clipboard, ipcMain, nativeImage } from "electron";
+import { BrowserWindow, clipboard, ipcMain, nativeImage, type IpcMainInvokeEvent } from "electron";
 import {
   createClipboardHistory,
   normalizeClipboardText,
   type ClipboardHistory,
   type ClipboardImagePayload,
-  type ClipboardItem
+  type ClipboardItem,
+  isClipboardImageWithinLimits,
+  maxClipboardImageBytes,
+  maxClipboardImagePixels
 } from "../shared/clipboard-history";
+import { ipcChannels } from "../shared/ipc-channels";
 import { schedulePasteIntoTargetApplication } from "./auto-paste";
 import { debugLog, textSummary } from "./debug-log";
+import type { IpcSenderValidator } from "./renderer-trust";
+import type { RendererSurface } from "./window-paths";
 
 export let clipboardHistory: ClipboardHistory = createClipboardHistory();
 
 let clipboardPollTimer: NodeJS.Timeout | null = null;
 let lastObservedSignature = "";
+
+type ClipboardHistoryIpcOptions = {
+  isTrustedSender: IpcSenderValidator;
+};
+
+const allRendererSurfaces = ["desktop", "popup"] as const satisfies readonly RendererSurface[];
+const popupRendererSurface = ["popup"] as const satisfies readonly RendererSurface[];
 
 export function configureClipboardHistory(nextClipboardHistory: ClipboardHistory): void {
   clipboardHistory.close?.();
@@ -43,8 +56,22 @@ export function sendToLiveWindow(window: BrowserWindow, channel: string, ...args
 
 function sendClipboardHistoryChanged(items: ClipboardItem[]): void {
   BrowserWindow.getAllWindows().forEach((window) => {
-    sendToLiveWindow(window, "clipboard-history:changed", items);
+    sendToLiveWindow(window, ipcChannels.clipboardHistoryChanged, items);
   });
+}
+
+function assertTrustedSender(
+  event: IpcMainInvokeEvent,
+  channel: string,
+  allowedSurfaces: readonly RendererSurface[],
+  isTrustedSender: IpcSenderValidator
+): void {
+  if (isTrustedSender(event, allowedSurfaces)) {
+    return;
+  }
+
+  debugLog("ipc", "reject untrusted renderer ipc", { channel, url: event.senderFrame?.url ?? "" });
+  throw new Error("Unauthorized IPC sender.");
 }
 
 export function clearClipboardHistory(): ClipboardItem[] {
@@ -82,10 +109,35 @@ function imagePayloadFromClipboard(): { payload: ClipboardImagePayload; signatur
     return null;
   }
 
-  const imageData = image.toPNG();
   const size = image.getSize();
 
-  if (imageData.length === 0 || size.width <= 0 || size.height <= 0) {
+  if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) {
+    return null;
+  }
+
+  if (size.width * size.height > maxClipboardImagePixels) {
+    debugLog("capture", "skip oversized clipboard image", {
+      height: size.height,
+      maxPixels: maxClipboardImagePixels,
+      width: size.width
+    });
+    return null;
+  }
+
+  const imageData = image.toPNG();
+
+  if (imageData.length === 0) {
+    return null;
+  }
+
+  if (!isClipboardImageWithinLimits(size.width, size.height, imageData.length)) {
+    debugLog("capture", "skip oversized clipboard image", {
+      bytes: imageData.length,
+      height: size.height,
+      maxBytes: maxClipboardImageBytes,
+      maxPixels: maxClipboardImagePixels,
+      width: size.width
+    });
     return null;
   }
 
@@ -161,14 +213,16 @@ export function captureCurrentClipboardItem(options: { force?: boolean } = {}): 
   return items;
 }
 
-export function registerClipboardHistoryIpc(): void {
-  ipcMain.handle("clipboard-history:list", (_event, query?: string) => {
+export function registerClipboardHistoryIpc({ isTrustedSender }: ClipboardHistoryIpcOptions): void {
+  ipcMain.handle(ipcChannels.clipboardHistoryList, (event, query?: string) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryList, allRendererSurfaces, isTrustedSender);
     const items = clipboardHistory.list(query);
     debugLog("ipc", "list clipboard history", { query: query ?? "", resultCount: items.length });
     return items;
   });
 
-  ipcMain.handle("clipboard-history:restore", (event, id: string) => {
+  ipcMain.handle(ipcChannels.clipboardHistoryRestore, (event, id: string) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryRestore, popupRendererSurface, isTrustedSender);
     const item = clipboardHistory.findById(id);
 
     if (!item) {
@@ -197,7 +251,8 @@ export function registerClipboardHistoryIpc(): void {
     return true;
   });
 
-  ipcMain.handle("clipboard-popup:dismiss", (event) => {
+  ipcMain.handle(ipcChannels.clipboardPopupDismiss, (event) => {
+    assertTrustedSender(event, ipcChannels.clipboardPopupDismiss, popupRendererSurface, isTrustedSender);
     BrowserWindow.fromWebContents(event.sender)?.hide();
     debugLog("ipc", "dismiss popup");
   });

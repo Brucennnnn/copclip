@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSqliteClipboardHistory } from "../src/main/sqlite-clipboard-history";
-import type { ClipboardItem } from "../src/shared/clipboard-history";
+import { maxClipboardImagePixels, type ClipboardItem } from "../src/shared/clipboard-history";
 
 const pngDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -95,6 +95,15 @@ describe("sqlite clipboard text history", () => {
       height: 1
     });
     secondHistory.close?.();
+  });
+
+  it("rejects oversized copied images before persistence", () => {
+    const databasePath = createDatabasePath();
+    const history = createSqliteClipboardHistory(databasePath);
+
+    expect(history.captureImage({ imageDataUrl: pngDataUrl, width: maxClipboardImagePixels + 1, height: 1 })).toBeNull();
+    expect(history.list()).toEqual([]);
+    history.close?.();
   });
 
   it("migrates existing text history to the typed schema", () => {

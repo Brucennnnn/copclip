@@ -53,6 +53,8 @@ type ClipboardHistoryOptions = {
 
 const defaultPreviewLength = 140;
 const defaultHistoryLimit = 100;
+export const maxClipboardImageBytes = 25 * 1024 * 1024;
+export const maxClipboardImagePixels = 25_000_000;
 
 export function normalizeClipboardText(text: string): string | null {
   const normalized = text.replace(/\r\n/g, "\n").trim();
@@ -74,21 +76,45 @@ export function normalizeClipboardLink(text: string): string | null {
   }
 }
 
+function base64ByteLength(value: string): number | null {
+  if (value.length === 0 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
+    return null;
+  }
+
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return value.length / 4 * 3 - padding;
+}
+
+export function isClipboardImageWithinLimits(width: number, height: number, byteLength: number): boolean {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(byteLength)) {
+    return false;
+  }
+
+  return width > 0 && height > 0 && byteLength > 0 && byteLength <= maxClipboardImageBytes && width * height <= maxClipboardImagePixels;
+}
+
 export function normalizeClipboardImage(image: ClipboardImagePayload): ClipboardImagePayload | null {
+  const imageData = image.imageDataUrl.startsWith("data:image/png;base64,")
+    ? image.imageDataUrl.slice("data:image/png;base64,".length)
+    : "";
+  const imageByteLength = base64ByteLength(imageData);
+  const width = Math.round(image.width);
+  const height = Math.round(image.height);
+
   if (
     !image.imageDataUrl.startsWith("data:image/png;base64,") ||
     !Number.isFinite(image.width) ||
     !Number.isFinite(image.height) ||
-    image.width <= 0 ||
-    image.height <= 0
+    !imageByteLength ||
+    !isClipboardImageWithinLimits(width, height, imageByteLength)
   ) {
     return null;
   }
 
   return {
     imageDataUrl: image.imageDataUrl,
-    width: Math.round(image.width),
-    height: Math.round(image.height)
+    width,
+    height
   };
 }
 
