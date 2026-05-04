@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { preloadScriptPath, rendererDevUrl } from "../src/main/window-paths";
+import { preloadScriptPath, rendererDevUrl, rendererFileUrl } from "../src/main/window-paths";
 
 describe("main window paths", () => {
   it("points BrowserWindow at the electron-vite preload output", () => {
@@ -9,5 +9,9 @@ describe("main window paths", () => {
   it("loads distinct renderer surfaces in development", () => {
     expect(rendererDevUrl("http://localhost:5173/", "desktop")).toBe("http://localhost:5173/?surface=desktop");
     expect(rendererDevUrl("http://localhost:5173/?debug=1", "popup")).toBe("http://localhost:5173/?debug=1&surface=popup");
+  });
+
+  it("loads distinct renderer surfaces in production", () => {
+    expect(rendererFileUrl("/app/out/main", "popup")).toBe("file:///app/out/renderer/index.html?surface=popup");
   });
 });

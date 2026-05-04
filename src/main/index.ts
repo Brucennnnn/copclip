@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray, type IpcMainInvokeEvent } from "electron";
 import { is } from "@electron-toolkit/utils";
 import { requestedStartupSurface } from "./app-command";
 import {
@@ -21,8 +21,10 @@ import { ensureLiveWindow } from "./popup-window-state";
 import { createFileSettingsStore, type SettingsStore } from "./settings-store";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
+import { ipcChannels } from "../shared/ipc-channels";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
+import { createRendererTrustPolicy, isAllowedExternalUrl } from "./renderer-trust";
 
 enableWaylandGlobalShortcuts(app.commandLine);
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -35,6 +37,12 @@ const desktopSize = {
   width: 1040,
   height: 720
 };
+const allRendererSurfaces = ["desktop", "popup"] as const satisfies readonly RendererSurface[];
+const desktopRendererSurface = ["desktop"] as const satisfies readonly RendererSurface[];
+const rendererTrustPolicy = createRendererTrustPolicy({
+  baseDir: __dirname,
+  devRendererUrl: is.dev ? process.env.ELECTRON_RENDERER_URL : undefined
+});
 
 let desktopWindow: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null;
@@ -45,6 +53,23 @@ let registeredHotkey = "";
 let settingsStore: SettingsStore | null = null;
 let appSettings: CopClipSettings = defaultCopClipSettings;
 let suppressDesktopShellUntil = 0;
+
+function isTrustedIpcSender(event: IpcMainInvokeEvent, allowedSurfaces: readonly RendererSurface[]): boolean {
+  return rendererTrustPolicy.isTrustedIpcSender(event, allowedSurfaces);
+}
+
+function assertTrustedIpcSender(
+  event: IpcMainInvokeEvent,
+  channel: string,
+  allowedSurfaces: readonly RendererSurface[]
+): void {
+  if (isTrustedIpcSender(event, allowedSurfaces)) {
+    return;
+  }
+
+  debugLog("ipc", "reject untrusted renderer ipc", { channel, url: event.senderFrame?.url ?? "" });
+  throw new Error("Unauthorized IPC sender.");
+}
 
 function suppressDesktopShellActivation(durationMs = 1000): void {
   suppressDesktopShellUntil = Math.max(suppressDesktopShellUntil, Date.now() + durationMs);
@@ -94,7 +119,7 @@ function openClipboardPopup(): void {
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
-  const sent = sendToLiveWindow(popupWindow, "clipboard-popup:opened", items);
+  const sent = sendToLiveWindow(popupWindow, ipcChannels.clipboardPopupOpened, items);
   debugLog("popup", "sent popup opened event", { sent });
 }
 
@@ -141,14 +166,19 @@ function replaceGlobalHotkey(accelerator: string): boolean {
 
 function sendSettingsChanged(): void {
   BrowserWindow.getAllWindows().forEach((window) => {
-    sendToLiveWindow(window, "settings:changed", appSettings);
+    sendToLiveWindow(window, ipcChannels.settingsChanged, appSettings);
   });
 }
 
 function registerSettingsIpc(): void {
-  ipcMain.handle("settings:get", () => appSettings);
+  ipcMain.handle(ipcChannels.settingsGet, (event) => {
+    assertTrustedIpcSender(event, ipcChannels.settingsGet, allRendererSurfaces);
+    return appSettings;
+  });
 
-  ipcMain.handle("settings:update", (_event, patch) => {
+  ipcMain.handle(ipcChannels.settingsUpdate, (event, patch) => {
+    assertTrustedIpcSender(event, ipcChannels.settingsUpdate, desktopRendererSurface);
+
     if (!settingsStore) {
       return {
         ok: false,
@@ -292,9 +322,31 @@ function loadRendererSurface(window: BrowserWindow, surface: RendererSurface): v
   }
 }
 
-function configureExternalLinks(window: BrowserWindow): void {
+function configureRendererTrust(window: BrowserWindow, surface: RendererSurface): void {
+  const preventUntrustedNavigation = (
+    event: Electron.Event,
+    url: string,
+    _isInPlace: boolean,
+    isMainFrame: boolean
+  ) => {
+    if (!rendererTrustPolicy.shouldBlockNavigation(url, [surface], isMainFrame)) {
+      return;
+    }
+
+    event.preventDefault();
+    debugLog("window", "blocked untrusted renderer navigation", { surface, url });
+  };
+
+  window.webContents.on("will-navigate", preventUntrustedNavigation);
+  window.webContents.on("will-redirect", preventUntrustedNavigation);
+
   window.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    } else {
+      debugLog("window", "blocked external url", { url });
+    }
+
     return { action: "deny" };
   });
 }
@@ -332,7 +384,7 @@ function createDesktopShellWindow(): BrowserWindow {
     debugLog("window", "desktop renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
-  configureExternalLinks(window);
+  configureRendererTrust(window, "desktop");
   loadRendererSurface(window, "desktop");
 
   return window;
@@ -384,7 +436,7 @@ function createClipboardPopupWindow(): BrowserWindow {
     debugLog("window", "popup renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
-  configureExternalLinks(window);
+  configureRendererTrust(window, "popup");
   loadRendererSurface(window, "popup");
 
   return window;
@@ -409,7 +461,7 @@ if (hasSingleInstanceLock) {
     configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
       historyLimit: appSettings.historyLimit
     }));
-    registerClipboardHistoryIpc();
+    registerClipboardHistoryIpc({ isTrustedSender: isTrustedIpcSender });
     registerSettingsIpc();
     desktopWindow = createDesktopShellWindow();
     popupWindow = createClipboardPopupWindow();
