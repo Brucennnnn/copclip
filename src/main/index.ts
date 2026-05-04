@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { is } from "@electron-toolkit/utils";
+import { requestedStartupSurface } from "./app-command";
 import {
   captureCurrentClipboardItem,
   closeClipboardHistory,
@@ -14,6 +15,7 @@ import {
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
 import { capturePasteTargetApplication } from "./auto-paste";
+import { enableWaylandGlobalShortcuts } from "./global-shortcuts";
 import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
 import { createFileSettingsStore, type SettingsStore } from "./settings-store";
@@ -21,6 +23,13 @@ import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
 import { positionPopupNearCursor } from "../shared/popup-position";
+
+enableWaylandGlobalShortcuts(app.commandLine);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 const desktopSize = {
   width: 1040,
@@ -91,7 +100,11 @@ function openClipboardPopup(): void {
 
 function registerGlobalHotkey(accelerator = appSettings.globalHotkey): boolean {
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
-  debugLog("hotkey", "register global shortcut", { accelerator, registered });
+  debugLog("hotkey", "register global shortcut", {
+    accelerator,
+    registered,
+    isRegistered: globalShortcut.isRegistered(accelerator)
+  });
 
   if (!registered) {
     console.warn(`CopClip could not register ${accelerator} global shortcut.`);
@@ -108,7 +121,11 @@ function replaceGlobalHotkey(accelerator: string): boolean {
   }
 
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
-  debugLog("hotkey", "replace global shortcut", { accelerator, registered });
+  debugLog("hotkey", "replace global shortcut", {
+    accelerator,
+    registered,
+    isRegistered: globalShortcut.isRegistered(accelerator)
+  });
 
   if (!registered) {
     return false;
@@ -373,28 +390,45 @@ function createClipboardPopupWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(() => {
-  debugLog("app", "ready");
-  settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
-  appSettings = settingsStore.get();
-  configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
-    historyLimit: appSettings.historyLimit
-  }));
-  registerClipboardHistoryIpc();
-  registerSettingsIpc();
-  desktopWindow = createDesktopShellWindow();
-  popupWindow = createClipboardPopupWindow();
-  createMenuBarController();
-  registerGlobalHotkey();
-  startClipboardCapture();
-  showDesktopShell();
+if (hasSingleInstanceLock) {
+  app.on("second-instance", (_event, argv) => {
+    if (requestedStartupSurface(argv) === "popup") {
+      openClipboardPopup();
+      return;
+    }
 
-  app.on("activate", () => {
-    if (shouldShowDesktopShellOnActivate()) {
+    showDesktopShell();
+  });
+}
+
+if (hasSingleInstanceLock) {
+  app.whenReady().then(() => {
+    debugLog("app", "ready");
+    settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
+    appSettings = settingsStore.get();
+    configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
+      historyLimit: appSettings.historyLimit
+    }));
+    registerClipboardHistoryIpc();
+    registerSettingsIpc();
+    desktopWindow = createDesktopShellWindow();
+    popupWindow = createClipboardPopupWindow();
+    createMenuBarController();
+    registerGlobalHotkey();
+    startClipboardCapture();
+    if (requestedStartupSurface() === "popup") {
+      openClipboardPopup();
+    } else {
       showDesktopShell();
     }
+
+    app.on("activate", () => {
+      if (shouldShowDesktopShellOnActivate()) {
+        showDesktopShell();
+      }
+    });
   });
-});
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

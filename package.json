@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "npm run rebuild:sqlite:electron && electron-vite dev",
     "dev:debug": "npm run rebuild:sqlite:electron && COPCLIP_DEBUG=1 electron-vite dev",
+    "open:popup": "electron . --open-popup",
     "rebuild:sqlite:electron": "npm_config_runtime=electron npm_config_target=$(node -p \"require('electron/package.json').version\") npm_config_disturl=https://electronjs.org/headers npm rebuild better-sqlite3 --loglevel=error",
     "rebuild:sqlite:node": "npm rebuild better-sqlite3",
     "build": "tsc --noEmit && electron-vite build",

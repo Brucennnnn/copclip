@@ -18,6 +18,7 @@ const execFile = vi.fn(
   }
 );
 const execFileSync = vi.fn(() => "com.example.Editor\n");
+const originalPlatform = process.platform;
 
 type MockNativeImage = {
   isEmpty: () => boolean;
@@ -45,6 +46,13 @@ let clipboardImage = createEmptyImage();
 
 function itemLabels(items: ClipboardItem[]): string[] {
   return items.map((item) => (item.type === "image" ? item.preview : item.text));
+}
+
+function stubPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, "platform", {
+    configurable: true,
+    value: platform
+  });
 }
 
 vi.mock("electron", () => ({
@@ -82,6 +90,7 @@ vi.mock("node:child_process", () => ({
 
 describe("clipboard capture", () => {
   beforeEach(() => {
+    stubPlatform(originalPlatform);
     clipboardText = "";
     clipboardImage = createEmptyImage();
     windows.length = 0;
@@ -100,6 +109,7 @@ describe("clipboard capture", () => {
   });
 
   afterEach(() => {
+    stubPlatform(originalPlatform);
     vi.useRealTimers();
   });
 
@@ -225,6 +235,7 @@ describe("clipboard capture", () => {
   });
 
   it("restores text history items and auto-pastes into the previous app", async () => {
+    stubPlatform("darwin");
     vi.useFakeTimers();
     clipboardText = "paste me";
     const { capturePasteTargetApplication } = await import("../src/main/auto-paste");
@@ -256,6 +267,7 @@ describe("clipboard capture", () => {
   });
 
   it("restores image history items and auto-pastes into the previous app", async () => {
+    stubPlatform("darwin");
     vi.useFakeTimers();
     clipboardImage = createClipboardImage();
     const { capturePasteTargetApplication } = await import("../src/main/auto-paste");
@@ -281,6 +293,7 @@ describe("clipboard capture", () => {
   });
 
   it("still restores clipboard text when accessibility permission blocks auto-paste", async () => {
+    stubPlatform("darwin");
     vi.useFakeTimers();
     isTrustedAccessibilityClient.mockReturnValue(false);
     clipboardText = "copied but not pasted";

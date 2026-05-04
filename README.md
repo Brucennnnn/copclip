@@ -16,6 +16,14 @@ Run the app in development mode:
 npm run dev
 ```
 
+On Linux Wayland, CopClip enables Electron's global-shortcut portal so `Ctrl+Shift+V` can open the clipboard popup. The normal app window opens to the desktop History view; the compact "Clipboard history" popup is the separate window opened by the global hotkey or by the tray/menu-bar "Open Popup" command. If the shortcut is already owned by your compositor or another app, change it in Settings.
+
+If your Wayland compositor does not deliver Electron global shortcuts, bind the compositor shortcut to CopClip's popup command instead:
+
+```sh
+cd /home/inwpuun/project/copclip && npm run open:popup --silent
+```
+
 The development and test scripts rebuild the native SQLite binding for the runtime they are about to use. If you need to do that manually:
 
 ```sh
