@@ -58,7 +58,7 @@ The scaffold includes:
 - A menu bar item with Open Popup, Open Desktop Shell, Pause or Resume Capture, Clear History, Settings, About & Privacy, Hide Dock Icon, and Quit commands.
 - Local settings for global hotkey, history limit, popup size, and theme, with validation and runtime behavior updates.
 - Cursor-aware popup positioning constrained to the active display work area, with the popup above other windows while visible.
-- Styling based on `docs/design/initial-app-shell.html`.
+- Tailwind CSS renderer styling with Phosphor React icons, based on `docs/design/initial-app-shell.html`.
 - Vitest coverage for the desktop shell, quick popup, exposed preload API contract, typed clipboard history, image persistence, deduplication, search behavior, restore selection, dismissal, search focus, and deterministic popup positioning.
 
 The app intentionally does not include packaging yet. That is tracked by a follow-up issue.
