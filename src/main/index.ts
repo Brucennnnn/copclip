@@ -1,30 +1,48 @@
 import { join } from "node:path";
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray, type IpcMainInvokeEvent } from "electron";
 import { is } from "@electron-toolkit/utils";
+import { requestedStartupSurface } from "./app-command";
 import {
-  captureCurrentClipboardText,
+  captureCurrentClipboardItem,
   closeClipboardHistory,
   configureClipboardHistory,
   clearClipboardHistory,
   registerClipboardHistoryIpc,
   sendToLiveWindow,
-  startTextClipboardCapture,
-  stopTextClipboardCapture,
+  startClipboardCapture,
+  stopClipboardCapture,
   updateClipboardHistoryLimit
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
+import { capturePasteTargetApplication, configureAutoPaste } from "./auto-paste";
+import { enableWaylandGlobalShortcuts } from "./global-shortcuts";
 import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
 import { createFileSettingsStore, type SettingsStore } from "./settings-store";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
+import { ipcChannels } from "../shared/ipc-channels";
 import { preloadScriptPath, rendererDevUrl, type RendererSurface } from "./window-paths";
-import { positionPopupNearCursor } from "../shared/popup-position";
+import { positionPopup, type Point } from "../shared/popup-position";
+import { createRendererTrustPolicy, isAllowedExternalUrl } from "./renderer-trust";
+
+enableWaylandGlobalShortcuts(app.commandLine);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 const desktopSize = {
-  width: 1040,
-  height: 720
+  width: 650,
+  height: 600
 };
+const allRendererSurfaces = ["desktop", "popup"] as const satisfies readonly RendererSurface[];
+const desktopRendererSurface = ["desktop"] as const satisfies readonly RendererSurface[];
+const rendererTrustPolicy = createRendererTrustPolicy({
+  baseDir: __dirname,
+  devRendererUrl: is.dev ? process.env.ELECTRON_RENDERER_URL : undefined
+});
 
 let desktopWindow: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null;
@@ -34,6 +52,50 @@ let dockHidden = false;
 let registeredHotkey = "";
 let settingsStore: SettingsStore | null = null;
 let appSettings: CopClipSettings = defaultCopClipSettings;
+let suppressDesktopShellUntil = 0;
+let lastPopupPosition: Point | null = null;
+
+function applyLaunchAtLogin(launchAtLogin: boolean): void {
+  app.setLoginItemSettings({
+    openAtLogin: launchAtLogin
+  });
+}
+
+function applyRuntimeSettings(settings: CopClipSettings): void {
+  applyLaunchAtLogin(settings.launchAtLogin);
+  configureAutoPaste({ pasteAutomatically: settings.pasteAutomatically });
+  debugLog("settings", "runtime settings applied", {
+    checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
+    launchAtLogin: settings.launchAtLogin,
+    pasteAutomatically: settings.pasteAutomatically
+  });
+}
+
+function isTrustedIpcSender(event: IpcMainInvokeEvent, allowedSurfaces: readonly RendererSurface[]): boolean {
+  return rendererTrustPolicy.isTrustedIpcSender(event, allowedSurfaces);
+}
+
+function assertTrustedIpcSender(
+  event: IpcMainInvokeEvent,
+  channel: string,
+  allowedSurfaces: readonly RendererSurface[]
+): void {
+  if (isTrustedIpcSender(event, allowedSurfaces)) {
+    return;
+  }
+
+  debugLog("ipc", "reject untrusted renderer ipc", { channel, url: event.senderFrame?.url ?? "" });
+  throw new Error("Unauthorized IPC sender.");
+}
+
+function suppressDesktopShellActivation(durationMs = 1000): void {
+  suppressDesktopShellUntil = Math.max(suppressDesktopShellUntil, Date.now() + durationMs);
+}
+
+function shouldShowDesktopShellOnActivate(): boolean {
+  const popupIsVisible = popupWindow && !popupWindow.isDestroyed() && popupWindow.isVisible();
+  return !popupIsVisible && Date.now() >= suppressDesktopShellUntil;
+}
 
 function showDesktopShell(): void {
   debugLog("desktop", "show requested");
@@ -50,13 +112,19 @@ function showDesktopShellSection(section: "settings" | "privacy"): void {
 
 function openClipboardPopup(): void {
   debugLog("popup", "open requested");
+  capturePasteTargetApplication();
   popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
+
+  suppressDesktopShellActivation();
+  if (desktopWindow && !desktopWindow.isDestroyed() && desktopWindow.isVisible()) {
+    desktopWindow.hide();
+  }
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
-  const position = positionPopupNearCursor(cursor, display.workArea, appSettings.popupSize);
+  const position = positionPopup(appSettings.popupPosition, cursor, display.workArea, appSettings.popupSize, lastPopupPosition);
 
-  const items = captureCurrentClipboardText({ force: true });
+  const items = captureCurrentClipboardItem({ force: true });
   debugLog("popup", "show popup", {
     historyCount: items.length,
     x: position.x,
@@ -65,16 +133,21 @@ function openClipboardPopup(): void {
     height: appSettings.popupSize.height
   });
   popupWindow.setBounds({ ...position, ...appSettings.popupSize });
+  lastPopupPosition = position;
   popupWindow.setAlwaysOnTop(true, "floating");
   popupWindow.show();
   popupWindow.focus();
-  const sent = sendToLiveWindow(popupWindow, "clipboard-popup:opened", items);
+  const sent = sendToLiveWindow(popupWindow, ipcChannels.clipboardPopupOpened, items);
   debugLog("popup", "sent popup opened event", { sent });
 }
 
-function registerGlobalHotkey(accelerator = appSettings.globalHotkey): boolean {
+function registerGlobalHotkey(accelerator = appSettings.openClipboardHistoryShortcut): boolean {
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
-  debugLog("hotkey", "register global shortcut", { accelerator, registered });
+  debugLog("hotkey", "register global shortcut", {
+    accelerator,
+    registered,
+    isRegistered: globalShortcut.isRegistered(accelerator)
+  });
 
   if (!registered) {
     console.warn(`CopClip could not register ${accelerator} global shortcut.`);
@@ -91,7 +164,11 @@ function replaceGlobalHotkey(accelerator: string): boolean {
   }
 
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
-  debugLog("hotkey", "replace global shortcut", { accelerator, registered });
+  debugLog("hotkey", "replace global shortcut", {
+    accelerator,
+    registered,
+    isRegistered: globalShortcut.isRegistered(accelerator)
+  });
 
   if (!registered) {
     return false;
@@ -107,14 +184,19 @@ function replaceGlobalHotkey(accelerator: string): boolean {
 
 function sendSettingsChanged(): void {
   BrowserWindow.getAllWindows().forEach((window) => {
-    sendToLiveWindow(window, "settings:changed", appSettings);
+    sendToLiveWindow(window, ipcChannels.settingsChanged, appSettings);
   });
 }
 
 function registerSettingsIpc(): void {
-  ipcMain.handle("settings:get", () => appSettings);
+  ipcMain.handle(ipcChannels.settingsGet, (event) => {
+    assertTrustedIpcSender(event, ipcChannels.settingsGet, allRendererSurfaces);
+    return appSettings;
+  });
 
-  ipcMain.handle("settings:update", (_event, patch) => {
+  ipcMain.handle(ipcChannels.settingsUpdate, (event, patch) => {
+    assertTrustedIpcSender(event, ipcChannels.settingsUpdate, desktopRendererSurface);
+
     if (!settingsStore) {
       return {
         ok: false,
@@ -135,12 +217,15 @@ function registerSettingsIpc(): void {
       };
     }
 
-    if (validation.settings.globalHotkey !== appSettings.globalHotkey && !replaceGlobalHotkey(validation.settings.globalHotkey)) {
+    if (
+      validation.settings.openClipboardHistoryShortcut !== appSettings.openClipboardHistoryShortcut &&
+      !replaceGlobalHotkey(validation.settings.openClipboardHistoryShortcut)
+    ) {
       return {
         ok: false,
         settings: appSettings,
         errors: {
-          globalHotkey: "This shortcut could not be registered."
+          openClipboardHistoryShortcut: "This shortcut could not be registered."
         }
       };
     }
@@ -151,6 +236,14 @@ function registerSettingsIpc(): void {
 
     if (appSettings.historyLimit !== previousSettings.historyLimit) {
       updateClipboardHistoryLimit(appSettings.historyLimit);
+    }
+
+    if (appSettings.launchAtLogin !== previousSettings.launchAtLogin) {
+      applyLaunchAtLogin(appSettings.launchAtLogin);
+    }
+
+    if (appSettings.pasteAutomatically !== previousSettings.pasteAutomatically) {
+      configureAutoPaste({ pasteAutomatically: appSettings.pasteAutomatically });
     }
 
     if (
@@ -170,6 +263,12 @@ function registerSettingsIpc(): void {
       settings: appSettings,
       errors: {}
     };
+  });
+
+  ipcMain.handle(ipcChannels.settingsOpen, (event) => {
+    assertTrustedIpcSender(event, ipcChannels.settingsOpen, allRendererSurfaces);
+    BrowserWindow.fromWebContents(event.sender)?.hide();
+    showDesktopShellSection("settings");
   });
 }
 
@@ -208,14 +307,14 @@ function refreshMenuBarMenu(): void {
         openDesktopShell: showDesktopShell,
         openPopup: openClipboardPopup,
         pauseCapture: () => {
-          stopTextClipboardCapture();
+          stopClipboardCapture();
           capturePaused = true;
         },
         quit: () => {
           app.quit();
         },
         resumeCapture: () => {
-          startTextClipboardCapture();
+          startClipboardCapture();
           capturePaused = false;
         },
         showDock: () => {
@@ -258,9 +357,31 @@ function loadRendererSurface(window: BrowserWindow, surface: RendererSurface): v
   }
 }
 
-function configureExternalLinks(window: BrowserWindow): void {
+function configureRendererTrust(window: BrowserWindow, surface: RendererSurface): void {
+  const preventUntrustedNavigation = (
+    event: Electron.Event,
+    url: string,
+    _isInPlace: boolean,
+    isMainFrame: boolean
+  ) => {
+    if (!rendererTrustPolicy.shouldBlockNavigation(url, [surface], isMainFrame)) {
+      return;
+    }
+
+    event.preventDefault();
+    debugLog("window", "blocked untrusted renderer navigation", { surface, url });
+  };
+
+  window.webContents.on("will-navigate", preventUntrustedNavigation);
+  window.webContents.on("will-redirect", preventUntrustedNavigation);
+
   window.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    } else {
+      debugLog("window", "blocked external url", { url });
+    }
+
     return { action: "deny" };
   });
 }
@@ -270,11 +391,13 @@ function createDesktopShellWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: desktopSize.width,
     height: desktopSize.height,
-    minWidth: 860,
-    minHeight: 560,
+    minWidth: desktopSize.width,
+    minHeight: desktopSize.height,
     title: "CopClip",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 18 },
     show: false,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#1b1f1f",
     webPreferences: {
       preload: preloadScriptPath(__dirname),
       contextIsolation: true,
@@ -298,7 +421,7 @@ function createDesktopShellWindow(): BrowserWindow {
     debugLog("window", "desktop renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
-  configureExternalLinks(window);
+  configureRendererTrust(window, "desktop");
   loadRendererSurface(window, "desktop");
 
   return window;
@@ -326,7 +449,13 @@ function createClipboardPopupWindow(): BrowserWindow {
 
   window.on("hide", () => {
     debugLog("window", "popup hidden");
+    suppressDesktopShellActivation();
     window.setAlwaysOnTop(false);
+  });
+
+  window.on("moved", () => {
+    const [x, y] = window.getPosition();
+    lastPopupPosition = { x, y };
   });
 
   window.on("blur", () => {
@@ -349,32 +478,52 @@ function createClipboardPopupWindow(): BrowserWindow {
     debugLog("window", "popup renderer failed to load", { errorCode, errorDescription, validatedURL });
   });
 
-  configureExternalLinks(window);
+  configureRendererTrust(window, "popup");
   loadRendererSurface(window, "popup");
 
   return window;
 }
 
-app.whenReady().then(() => {
-  debugLog("app", "ready");
-  settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
-  appSettings = settingsStore.get();
-  configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
-    historyLimit: appSettings.historyLimit
-  }));
-  registerClipboardHistoryIpc();
-  registerSettingsIpc();
-  desktopWindow = createDesktopShellWindow();
-  popupWindow = createClipboardPopupWindow();
-  createMenuBarController();
-  registerGlobalHotkey();
-  startTextClipboardCapture();
-  showDesktopShell();
+if (hasSingleInstanceLock) {
+  app.on("second-instance", (_event, argv) => {
+    if (requestedStartupSurface(argv) === "popup") {
+      openClipboardPopup();
+      return;
+    }
 
-  app.on("activate", () => {
     showDesktopShell();
   });
-});
+}
+
+if (hasSingleInstanceLock) {
+  app.whenReady().then(() => {
+    debugLog("app", "ready");
+    settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
+    appSettings = settingsStore.get();
+    applyRuntimeSettings(appSettings);
+    configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
+      historyLimit: appSettings.historyLimit
+    }));
+    registerClipboardHistoryIpc({ isTrustedSender: isTrustedIpcSender });
+    registerSettingsIpc();
+    desktopWindow = createDesktopShellWindow();
+    popupWindow = createClipboardPopupWindow();
+    createMenuBarController();
+    registerGlobalHotkey();
+    startClipboardCapture();
+    if (requestedStartupSurface() === "popup") {
+      openClipboardPopup();
+    } else {
+      showDesktopShell();
+    }
+
+    app.on("activate", () => {
+      if (shouldShowDesktopShellOnActivate()) {
+        showDesktopShell();
+      }
+    });
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -386,6 +535,6 @@ app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   menuBarTray?.destroy();
   menuBarTray = null;
-  stopTextClipboardCapture();
+  stopClipboardCapture();
   closeClipboardHistory();
 });

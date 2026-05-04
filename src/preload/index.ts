@@ -1,22 +1,23 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appInfo } from "../shared/app-info";
 import type { CopClipSettings } from "../shared/app-settings";
-import type { ClipboardTextItem } from "../shared/clipboard-history";
+import type { ClipboardItem } from "../shared/clipboard-history";
+import { ipcChannels } from "../shared/ipc-channels";
 import type { CopClipApi } from "./api";
 
 const copclip: CopClipApi = {
   getAppInfo: () => appInfo,
-  dismissClipboardPopup: () => ipcRenderer.invoke("clipboard-popup:dismiss"),
-  getSettings: () => ipcRenderer.invoke("settings:get"),
-  listClipboardHistory: (query) => ipcRenderer.invoke("clipboard-history:list", query),
+  dismissClipboardPopup: () => ipcRenderer.invoke(ipcChannels.clipboardPopupDismiss),
+  getSettings: () => ipcRenderer.invoke(ipcChannels.settingsGet),
+  listClipboardHistory: (query) => ipcRenderer.invoke(ipcChannels.clipboardHistoryList, query),
   onClipboardHistoryChanged: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardItem[]) => {
       callback(items);
     };
 
-    ipcRenderer.on("clipboard-history:changed", listener);
+    ipcRenderer.on(ipcChannels.clipboardHistoryChanged, listener);
     return () => {
-      ipcRenderer.removeListener("clipboard-history:changed", listener);
+      ipcRenderer.removeListener(ipcChannels.clipboardHistoryChanged, listener);
     };
   },
   onSettingsChanged: (callback) => {
@@ -24,23 +25,24 @@ const copclip: CopClipApi = {
       callback(settings);
     };
 
-    ipcRenderer.on("settings:changed", listener);
+    ipcRenderer.on(ipcChannels.settingsChanged, listener);
     return () => {
-      ipcRenderer.removeListener("settings:changed", listener);
+      ipcRenderer.removeListener(ipcChannels.settingsChanged, listener);
     };
   },
   onClipboardPopupOpened: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardItem[]) => {
       callback(items);
     };
 
-    ipcRenderer.on("clipboard-popup:opened", listener);
+    ipcRenderer.on(ipcChannels.clipboardPopupOpened, listener);
     return () => {
-      ipcRenderer.removeListener("clipboard-popup:opened", listener);
+      ipcRenderer.removeListener(ipcChannels.clipboardPopupOpened, listener);
     };
   },
-  restoreClipboardItem: (id) => ipcRenderer.invoke("clipboard-history:restore", id),
-  updateSettings: (patch) => ipcRenderer.invoke("settings:update", patch)
+  openSettings: () => ipcRenderer.invoke(ipcChannels.settingsOpen),
+  restoreClipboardItem: (id) => ipcRenderer.invoke(ipcChannels.clipboardHistoryRestore, id),
+  updateSettings: (patch) => ipcRenderer.invoke(ipcChannels.settingsUpdate, patch)
 };
 
 contextBridge.exposeInMainWorld("copclip", copclip);

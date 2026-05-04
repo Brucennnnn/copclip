@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "npm run rebuild:sqlite:electron && electron-vite dev",
     "dev:debug": "npm run rebuild:sqlite:electron && COPCLIP_DEBUG=1 electron-vite dev",
-    "rebuild:sqlite:electron": "npm rebuild better-sqlite3 --runtime=electron --target=33.2.1 --disturl=https://electronjs.org/headers",
+    "open:popup": "electron . --open-popup",
+    "rebuild:sqlite:electron": "npm_config_runtime=electron npm_config_target=$(node -p \"require('electron/package.json').version\") npm_config_disturl=https://electronjs.org/headers npm rebuild better-sqlite3 --loglevel=error",
     "rebuild:sqlite:node": "npm rebuild better-sqlite3",
     "build": "tsc --noEmit && electron-vite build",
     "test": "npm run rebuild:sqlite:node && vitest run",
@@ -31,11 +32,11 @@
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.2.1",
-    "electron-vite": "^2.3.0",
+    "electron": "^41.5.0",
+    "electron-vite": "^5.0.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
   }
 }

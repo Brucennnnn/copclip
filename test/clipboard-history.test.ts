@@ -1,13 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
+  type ClipboardItem,
   createClipboardHistory,
+  isClipboardImageWithinLimits,
+  maxClipboardImageBytes,
+  maxClipboardImagePixels,
+  normalizeClipboardImage,
+  normalizeClipboardLink,
   normalizeClipboardText,
   previewText
 } from "../src/shared/clipboard-history";
 
+const pngDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+function itemLabels(items: ClipboardItem[]): string[] {
+  return items.map((item) => (item.type === "image" ? item.preview : item.text));
+}
+
 describe("clipboard text history", () => {
   it("rejects empty text after trimming whitespace", () => {
     expect(normalizeClipboardText(" \n\t ")).toBeNull();
+  });
+
+  it("recognizes copied http and https links", () => {
+    expect(normalizeClipboardLink("https://example.com/docs")).toBe("https://example.com/docs");
+    expect(normalizeClipboardLink("ftp://example.com/file")).toBeNull();
+    expect(normalizeClipboardLink("https://example.com/docs and text")).toBeNull();
   });
 
   it("keeps captured text ordered by most recent first", () => {
@@ -20,7 +38,7 @@ describe("clipboard text history", () => {
     history.captureText("first");
     history.captureText("second");
 
-    expect(history.list().map((item) => item.text)).toEqual(["second", "first"]);
+    expect(itemLabels(history.list())).toEqual(["second", "first"]);
   });
 
   it("deduplicates repeated text without adding clutter", () => {
@@ -34,8 +52,50 @@ describe("clipboard text history", () => {
     history.captureText("beta");
     const repeated = history.captureText("alpha");
 
-    expect(history.list().map((item) => item.text)).toEqual(["alpha", "beta"]);
+    expect(itemLabels(history.list())).toEqual(["alpha", "beta"]);
     expect(repeated?.id).toBe(first?.id);
+  });
+
+  it("captures copied links with a URL type", () => {
+    const history = createClipboardHistory({ createId: () => "clip-link" });
+
+    const item = history.captureText("https://example.com/docs");
+
+    expect(item).toMatchObject({
+      id: "clip-link",
+      type: "link",
+      text: "https://example.com/docs",
+      url: "https://example.com/docs"
+    });
+  });
+
+  it("captures and deduplicates copied images", () => {
+    let timestamp = 0;
+    const history = createClipboardHistory({
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, timestamp++)),
+      createId: () => `clip-${timestamp}`
+    });
+
+    const first = history.captureImage({ imageDataUrl: pngDataUrl, width: 1, height: 1 });
+    const repeated = history.captureImage({ imageDataUrl: pngDataUrl, width: 1, height: 1 });
+
+    expect(repeated?.id).toBe(first?.id);
+    expect(history.list()).toEqual([
+      expect.objectContaining({
+        type: "image",
+        preview: "Image 1x1",
+        imageDataUrl: pngDataUrl,
+        width: 1,
+        height: 1
+      })
+    ]);
+  });
+
+  it("rejects invalid or oversized copied images", () => {
+    expect(normalizeClipboardImage({ imageDataUrl: "data:image/png;base64,not-valid", width: 1, height: 1 })).toBeNull();
+    expect(normalizeClipboardImage({ imageDataUrl: pngDataUrl, width: maxClipboardImagePixels + 1, height: 1 })).toBeNull();
+    expect(isClipboardImageWithinLimits(1, 1, maxClipboardImageBytes + 1)).toBe(false);
+    expect(isClipboardImageWithinLimits(1, 1, maxClipboardImageBytes)).toBe(true);
   });
 
   it("filters text history immediately with case-insensitive search", () => {
@@ -45,8 +105,8 @@ describe("clipboard text history", () => {
     history.captureText("GitHub issue");
     history.captureText("Clipboard manager");
 
-    expect(history.list("git").map((item) => item.text)).toEqual(["GitHub issue"]);
-    expect(history.list("CLIP").map((item) => item.text)).toEqual(["Clipboard manager"]);
+    expect(itemLabels(history.list("git"))).toEqual(["GitHub issue"]);
+    expect(itemLabels(history.list("CLIP"))).toEqual(["Clipboard manager"]);
   });
 
   it("clears all text history", () => {
@@ -67,7 +127,7 @@ describe("clipboard text history", () => {
     history.captureText("Third");
     history.setHistoryLimit?.(2);
 
-    expect(history.list().map((item) => item.text)).toEqual(["Third", "Second"]);
+    expect(itemLabels(history.list())).toEqual(["Third", "Second"]);
   });
 
   it("creates readable single-line truncated previews", () => {

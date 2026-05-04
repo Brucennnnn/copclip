@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { positionPopupNearCursor } from "../src/shared/popup-position";
+import { positionPopup, positionPopupNearCursor } from "../src/shared/popup-position";
 
 const popupSize = { width: 720, height: 520 };
 
@@ -52,5 +52,26 @@ describe("popup positioning", () => {
         popupSize
       )
     ).toEqual({ x: -860, y: 166 });
+  });
+
+  it("positions the popup at fixed work area locations", () => {
+    const workArea = { x: 0, y: 20, width: 1600, height: 980 };
+    const cursor = { x: 800, y: 500 };
+
+    expect(positionPopup("top", cursor, workArea, popupSize)).toEqual({ x: 440, y: 20 });
+    expect(positionPopup("bottom", cursor, workArea, popupSize)).toEqual({ x: 440, y: 480 });
+    expect(positionPopup("center", cursor, workArea, popupSize)).toEqual({ x: 440, y: 250 });
+  });
+
+  it("keeps the last popup position visible", () => {
+    expect(
+      positionPopup(
+        "last-position",
+        { x: 800, y: 500 },
+        { x: 0, y: 0, width: 1600, height: 1000 },
+        popupSize,
+        { x: 1200, y: 900 }
+      )
+    ).toEqual({ x: 880, y: 480 });
   });
 });
