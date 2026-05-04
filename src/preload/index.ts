@@ -6,6 +6,8 @@ import { ipcChannels } from "../shared/ipc-channels";
 import type { CopClipApi } from "./api";
 
 const copclip: CopClipApi = {
+  clearClipboardHistory: () => ipcRenderer.invoke(ipcChannels.clipboardHistoryClear),
+  deleteClipboardItem: (id) => ipcRenderer.invoke(ipcChannels.clipboardHistoryDelete, id),
   getAppInfo: () => appInfo,
   dismissClipboardPopup: () => ipcRenderer.invoke(ipcChannels.clipboardPopupDismiss),
   getSettings: () => ipcRenderer.invoke(ipcChannels.settingsGet),
@@ -41,7 +43,9 @@ const copclip: CopClipApi = {
     };
   },
   openSettings: () => ipcRenderer.invoke(ipcChannels.settingsOpen),
+  pinClipboardItem: (id) => ipcRenderer.invoke(ipcChannels.clipboardHistoryPin, id),
   restoreClipboardItem: (id) => ipcRenderer.invoke(ipcChannels.clipboardHistoryRestore, id),
+  unpinClipboardItem: (id) => ipcRenderer.invoke(ipcChannels.clipboardHistoryUnpin, id),
   updateSettings: (patch) => ipcRenderer.invoke(ipcChannels.settingsUpdate, patch)
 };
 

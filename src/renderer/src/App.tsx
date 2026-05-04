@@ -60,7 +60,8 @@ function currentSurface(): "desktop" | "popup" {
 }
 
 type SettingsErrors = SettingsUpdateResult["errors"];
-type SettingsPage = "general" | "privacy" | "shortcuts" | "subscription";
+type SettingsPage = "history" | "general" | "privacy" | "shortcuts" | "subscription";
+type HistoryAction = "clear" | "delete" | "pin" | "unpin";
 
 type SettingsDraft = {
   checkForUpdatesAutomatically: boolean;
@@ -78,6 +79,7 @@ type SettingsDraft = {
 };
 
 const settingsPages: Array<{ id: SettingsPage; label: string; icon: string }> = [
+  { id: "history", label: "History", icon: "history" },
   { id: "general", label: "General", icon: "gear" },
   { id: "privacy", label: "Privacy", icon: "hand" },
   { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
@@ -104,7 +106,15 @@ function createSettingsDraft(settings: CopClipSettings): SettingsDraft {
 function normalizeSettingsPage(hash: string): SettingsPage {
   const page = hash.replace("#", "");
 
-  return page === "privacy" || page === "shortcuts" || page === "subscription" ? page : "general";
+  if (page === "general" || page === "privacy" || page === "shortcuts" || page === "subscription") {
+    return page;
+  }
+
+  if (page === "settings") {
+    return "general";
+  }
+
+  return "history";
 }
 
 function settingStatusText(status: string, errors: SettingsErrors): string {
@@ -160,6 +170,66 @@ function DisabledControl({ children, label }: { children: ReactNode; label?: str
   );
 }
 
+function PinBadge({ pinned }: { pinned: boolean }) {
+  return pinned ? <span className="pin-badge">Pinned</span> : null;
+}
+
+function ClipPreview({ item }: { item: ClipboardItem }) {
+  if (item.type === "image") {
+    return (
+      <div className="clip-image-preview">
+        <img alt="" src={item.imageDataUrl} />
+        <p>{item.preview}</p>
+      </div>
+    );
+  }
+
+  return <p>{item.preview}</p>;
+}
+
+function ClipActionButtons({ item, onDelete, onPinToggle }: { item: ClipboardItem; onDelete: () => void; onPinToggle: () => void }) {
+  return (
+    <div className="clip-actions" aria-label={`Actions for ${item.preview}`}>
+      <button
+        aria-label={`${item.pinned ? "Unpin" : "Pin"} clipboard item: ${item.preview}`}
+        className="clip-action"
+        type="button"
+        onClick={onPinToggle}
+      >
+        {item.pinned ? "Unpin" : "Pin"}
+      </button>
+      <button
+        aria-label={`Delete clipboard item: ${item.preview}`}
+        className="clip-action danger"
+        type="button"
+        onClick={onDelete}
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
+async function performHistoryAction(action: HistoryAction, item: ClipboardItem | undefined, fallbackItems: ClipboardItem[]): Promise<ClipboardItem[]> {
+  if (!window.copclip) {
+    return fallbackItems;
+  }
+
+  if (action === "clear") {
+    return window.copclip.clearClipboardHistory();
+  }
+
+  if (!item) {
+    return fallbackItems;
+  }
+
+  if (action === "delete") {
+    return window.copclip.deleteClipboardItem(item.id);
+  }
+
+  return action === "unpin" ? window.copclip.unpinClipboardItem(item.id) : window.copclip.pinClipboardItem(item.id);
+}
+
 function formatAccelerator(accelerator: string): string {
   return accelerator
     .replaceAll("CommandOrControl", "⌘")
@@ -193,6 +263,82 @@ function ShortcutInput({ error, label, value, onChange }: { error?: string; labe
       <DisabledControl label="Shortcut clearing is planned">×</DisabledControl>
       {error ? <em>{error}</em> : null}
     </label>
+  );
+}
+
+function HistorySettingsPage() {
+  const [historyItems, setHistoryItems] = useState<ClipboardItem[]>([]);
+  const [historyStatus, setHistoryStatus] = useState(Boolean(window.copclip) ? "Loading" : "Unavailable");
+
+  const loadHistory = useCallback(async () => {
+    if (!window.copclip) {
+      setHistoryStatus("Unavailable");
+      return;
+    }
+
+    const items = await window.copclip.listClipboardHistory("");
+    setHistoryItems(items);
+    setHistoryStatus(`${items.length} item${items.length === 1 ? "" : "s"}`);
+  }, []);
+
+  const applyHistoryAction = useCallback(async (action: HistoryAction, item?: ClipboardItem) => {
+    const items = await performHistoryAction(action, item, historyItems);
+    setHistoryItems(items);
+    setHistoryStatus(`${items.length} item${items.length === 1 ? "" : "s"}`);
+  }, [historyItems]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (!window.copclip) {
+      return undefined;
+    }
+
+    return window.copclip.onClipboardHistoryChanged((items) => {
+      setHistoryItems(items);
+      setHistoryStatus(`${items.length} item${items.length === 1 ? "" : "s"}`);
+    });
+  }, []);
+
+  return (
+    <>
+      <div className="history-toolbar">
+        <p className="panel-copy">Pin reusable clips, delete individual entries, or clear local history when needed.</p>
+        <button
+          className="history-clear-button"
+          disabled={historyItems.length === 0}
+          type="button"
+          onClick={() => void applyHistoryAction("clear")}
+        >
+          Clear history
+        </button>
+      </div>
+
+      <SettingsCard className="history-card">
+        {historyItems.map((item) => (
+          <div className="history-item-row" key={item.id}>
+            <div className="clip-icon">{clipKindLabel(item)}</div>
+            <div className="history-item-main">
+              <div className="clip-title">
+                <strong>{clipTitle(item)}</strong>
+                <PinBadge pinned={item.pinned} />
+              </div>
+              <ClipPreview item={item} />
+              <span className="history-item-meta">{formatClipAge(item.capturedAt)}</span>
+            </div>
+            <ClipActionButtons
+              item={item}
+              onDelete={() => void applyHistoryAction("delete", item)}
+              onPinToggle={() => void applyHistoryAction(item.pinned ? "unpin" : "pin", item)}
+            />
+          </div>
+        ))}
+        {historyItems.length === 0 ? <div className="history-empty" role="status">{historyStatus === "Loading" ? "Loading history" : "No clipboard history yet"}</div> : null}
+      </SettingsCard>
+      <span className="save-status" role="status">{historyStatus}</span>
+    </>
   );
 }
 
@@ -506,6 +652,10 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
   }
 
   function renderActivePage() {
+    if (activePage === "history") {
+      return <HistorySettingsPage />;
+    }
+
     if (activePage === "privacy") {
       return <PrivacySettingsPage />;
     }
@@ -667,6 +817,11 @@ function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
     void window.copclip?.dismissClipboardPopup();
   }, []);
 
+  const applyPopupHistoryAction = useCallback(async (action: HistoryAction, clip?: ClipboardItem) => {
+    const items = await performHistoryAction(action, clip, clips);
+    setClips(filterClips(items, query));
+  }, [clips, query]);
+
   useEffect(() => {
     function handlePopupKeyDown(event: KeyboardEvent) {
       if (event.key === "," && (event.metaKey || event.ctrlKey)) {
@@ -739,17 +894,27 @@ function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
       <section className="clipboard-popup" aria-label="Clipboard popup">
         <div className="history-top">
           <div className="title-row">
-              <h1>Clipboard history</h1>
+            <h1>Clipboard history</h1>
+            <div className="title-actions">
+              <button
+                className="clear-history-button"
+                disabled={clips.length === 0}
+                type="button"
+                onClick={() => void applyPopupHistoryAction("clear")}
+              >
+                Clear
+              </button>
               <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
             </div>
-            <label className="search">
-              <span aria-hidden="true">/</span>
-              <input
-                aria-label="Search clipboard history"
-                placeholder="Search copied text, links, or images"
-                ref={searchInputRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+          </div>
+          <label className="search">
+            <span aria-hidden="true">/</span>
+            <input
+              aria-label="Search clipboard history"
+              placeholder="Search copied text, links, or images"
+              ref={searchInputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
             <kbd>Esc</kbd>
           </label>
@@ -757,32 +922,35 @@ function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
 
         <div className="list" aria-label="Clipboard history results">
           {clips.map((clip, index) => (
-            <button
-              aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
-              aria-selected={index === selectedIndex}
-              className={`clip${index === selectedIndex ? " selected" : ""}`}
+            <div
+              className={`clip-shell${clip.pinned ? " pinned" : ""}`}
               key={clip.id}
-              onClick={() => void restoreClip(clip)}
               onMouseEnter={() => setSelectedIndex(index)}
-              type="button"
             >
-              <div className="clip-icon">{clipKindLabel(clip)}</div>
-              <div>
-                <div className="clip-title">
-                  <span className="shortcut">{index + 1}</span>
-                  <strong>{clipTitle(clip)}</strong>
-                </div>
-                {clip.type === "image" ? (
-                  <div className="clip-image-preview">
-                    <img alt="" src={clip.imageDataUrl} />
-                    <p>{clip.preview}</p>
+              <button
+                aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
+                aria-selected={index === selectedIndex}
+                className={`clip${index === selectedIndex ? " selected" : ""}`}
+                type="button"
+                onClick={() => void restoreClip(clip)}
+              >
+                <div className="clip-icon">{clipKindLabel(clip)}</div>
+                <div>
+                  <div className="clip-title">
+                    <span className="shortcut">{index + 1}</span>
+                    <strong>{clipTitle(clip)}</strong>
+                    <PinBadge pinned={clip.pinned} />
                   </div>
-                ) : (
-                  <p>{clip.preview}</p>
-                )}
-              </div>
-              <span className="meta">{formatClipAge(clip.capturedAt)}</span>
-            </button>
+                  <ClipPreview item={clip} />
+                </div>
+                <span className="meta">{formatClipAge(clip.capturedAt)}</span>
+              </button>
+              <ClipActionButtons
+                item={clip}
+                onDelete={() => void applyPopupHistoryAction("delete", clip)}
+                onPinToggle={() => void applyPopupHistoryAction(clip.pinned ? "unpin" : "pin", clip)}
+              />
+            </div>
           ))}
           {clips.length === 0 ? (
             <div className="empty-state" role="status">

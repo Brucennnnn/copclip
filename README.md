@@ -51,9 +51,9 @@ The scaffold includes:
 - A secure preload bridge that exposes app info, settings, and typed clipboard-history read/subscribe APIs.
 - Main-process clipboard polling for text, links, and images while the app is running.
 - `Command+Shift+V` global shortcut registration for opening the popup while CopClip is running in the background.
-- SQLite-backed clipboard history with empty-item filtering, deduplication, most-recent ordering, truncated previews, image thumbnail data, search filtering, and pruning.
-- A main desktop shell with History, Settings, Privacy, and Advanced sections for configuration and future management workflows.
-- A compact React clipboard popup with draggable top bar, live history search, text/link labels, image thumbnails, mouse selection, and keyboard selection.
+- SQLite-backed clipboard history with empty-item filtering, deduplication, most-recent ordering, pin-aware pruning, truncated previews, image thumbnail data, search filtering, and clear/delete/pin/unpin actions.
+- A main desktop shell with History controls, Settings, Privacy, and Advanced sections for configuration and management workflows.
+- A compact React clipboard popup with draggable top bar, live history search, text/link labels, image thumbnails, mouse selection, keyboard selection, and history action controls.
 - Restore and auto-paste actions for clicked text, link, and image items, arrow/Enter selection, number shortcuts, and Escape dismissal.
 - A menu bar item with Open Popup, Open Desktop Shell, Pause or Resume Capture, Clear History, Settings, About & Privacy, Hide Dock Icon, and Quit commands.
 - Local settings for global hotkey, history limit, popup size, and theme, with validation and runtime behavior updates.

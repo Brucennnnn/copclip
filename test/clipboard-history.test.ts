@@ -119,6 +119,44 @@ describe("clipboard text history", () => {
     expect(history.list()).toEqual([]);
   });
 
+  it("pins, unpins, and deletes history items", () => {
+    let timestamp = 0;
+    const history = createClipboardHistory({
+      createId: () => `clip-${timestamp}`,
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, timestamp++))
+    });
+
+    const alpha = history.captureText("alpha");
+    const beta = history.captureText("beta");
+
+    expect(history.pinItem?.(alpha?.id ?? "")).toBe(true);
+    expect(history.list()[0]).toMatchObject({ text: "alpha", pinned: true });
+
+    expect(history.unpinItem?.(alpha?.id ?? "")).toBe(true);
+    expect(itemLabels(history.list())).toEqual(["beta", "alpha"]);
+
+    expect(history.deleteItem?.(beta?.id ?? "")).toBe(true);
+    expect(history.deleteItem?.("missing")).toBe(false);
+    expect(itemLabels(history.list())).toEqual(["alpha"]);
+  });
+
+  it("prunes old unpinned items while preserving pinned items", () => {
+    let timestamp = 0;
+    const history = createClipboardHistory({
+      historyLimit: 2,
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, timestamp++))
+    });
+
+    const pinned = history.captureText("alpha");
+    expect(history.pinItem?.(pinned?.id ?? "")).toBe(true);
+
+    history.captureText("beta");
+    history.captureText("gamma");
+    history.captureText("delta");
+
+    expect(itemLabels(history.list())).toEqual(["alpha", "delta", "gamma"]);
+  });
+
   it("prunes existing text history when the limit changes", () => {
     const history = createClipboardHistory({ historyLimit: 5 });
 

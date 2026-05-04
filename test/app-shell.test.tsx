@@ -22,14 +22,16 @@ function createClips(): ClipboardItem[] {
       type: "text",
       text: "Release checklist",
       preview: "Release checklist",
-      capturedAt
+      capturedAt,
+      pinned: false
     },
     {
       id: "clip-2",
       type: "text",
       text: "GitHub issue link",
       preview: "GitHub issue link",
-      capturedAt
+      capturedAt,
+      pinned: false
     }
   ];
 }
@@ -40,7 +42,8 @@ function createManyClips(): ClipboardItem[] {
     type: "text" as const,
     text: `Recent clip ${index + 1}`,
     preview: `Recent clip ${index + 1}`,
-    capturedAt: new Date(Date.UTC(2026, 4, 1, 12, index)).toISOString()
+    capturedAt: new Date(Date.UTC(2026, 4, 1, 12, index)).toISOString(),
+    pinned: false
   }));
 }
 
@@ -54,7 +57,8 @@ function createMixedClips(): ClipboardItem[] {
       text: "https://example.com/docs",
       url: "https://example.com/docs",
       preview: "https://example.com/docs",
-      capturedAt
+      capturedAt,
+      pinned: false
     },
     {
       id: "clip-image",
@@ -63,9 +67,20 @@ function createMixedClips(): ClipboardItem[] {
       width: 1,
       height: 1,
       preview: "Image 1x1",
-      capturedAt
+      capturedAt,
+      pinned: false
     }
   ];
+}
+
+function sortClips(items: ClipboardItem[]): ClipboardItem[] {
+  return [...items].sort((first, second) => {
+    if (first.pinned !== second.pinned) {
+      return first.pinned ? -1 : 1;
+    }
+
+    return second.capturedAt.localeCompare(first.capturedAt);
+  });
 }
 
 function installClipboardApi(clips = createClips()) {
@@ -75,6 +90,16 @@ function installClipboardApi(clips = createClips()) {
   let currentClips = clips;
   let currentSettings = defaultCopClipSettings;
   const api = {
+    clearClipboardHistory: vi.fn(async () => {
+      currentClips = [];
+      historyChangedCallback?.(currentClips);
+      return currentClips;
+    }),
+    deleteClipboardItem: vi.fn(async (id: string) => {
+      currentClips = currentClips.filter((item) => item.id !== id);
+      historyChangedCallback?.(currentClips);
+      return currentClips;
+    }),
     getAppInfo: () => ({ name: "CopClip", version: "0.1.0", platform: "darwin" as const }),
     dismissClipboardPopup: vi.fn(async () => undefined),
     getSettings: vi.fn(async () => currentSettings),
@@ -100,6 +125,11 @@ function installClipboardApi(clips = createClips()) {
     openPopup: () => {
       popupOpenedCallback?.(currentClips);
     },
+    pinClipboardItem: vi.fn(async (id: string) => {
+      currentClips = sortClips(currentClips.map((item) => item.id === id ? { ...item, pinned: true } : item));
+      historyChangedCallback?.(currentClips);
+      return currentClips;
+    }),
     emitHistoryChanged: () => {
       historyChangedCallback?.(currentClips);
     },
@@ -107,6 +137,11 @@ function installClipboardApi(clips = createClips()) {
       currentClips = nextClips;
     },
     restoreClipboardItem: vi.fn(async () => true),
+    unpinClipboardItem: vi.fn(async (id: string) => {
+      currentClips = sortClips(currentClips.map((item) => item.id === id ? { ...item, pinned: false } : item));
+      historyChangedCallback?.(currentClips);
+      return currentClips;
+    }),
     updateSettings: vi.fn(async (patch: CopClipSettingsPatch) => {
       if (patch.historyLimit === 0 || patch.historyLimit === "0") {
         return {
@@ -191,14 +226,18 @@ describe("CopClip app shell", () => {
 
     expect(screen.getByLabelText("CopClip desktop shell")).toBeInTheDocument();
     expect(screen.getByLabelText("CopClip navigation")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /General/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /History/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /General/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Privacy/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Shortcuts/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Subscription/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Clipboard popup")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent Clips")).not.toBeInTheDocument();
-    expect(api.listClipboardHistory).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(api.listClipboardHistory).toHaveBeenCalledWith("");
+      expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
+    });
   });
 
   it("navigates between separate desktop settings pages", async () => {
@@ -230,15 +269,31 @@ describe("CopClip app shell", () => {
     expect(screen.getByRole("button", { name: /Privacy/ })).toHaveAttribute("aria-current", "page");
   });
 
-  it("keeps clipboard history out of the desktop settings window", () => {
+  it("shows desktop history controls for local clipboard management", async () => {
     const api = installClipboardApi(createManyClips());
     window.history.pushState({}, "", "/?surface=desktop");
 
     render(<App />);
 
-    expect(api.listClipboardHistory).not.toHaveBeenCalled();
-    expect(screen.queryByText("Recent clip 1")).not.toBeInTheDocument();
-    expect(screen.queryByText("Clipboard history")).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Recent clip 1")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /Pin clipboard item: Recent clip 1/ }));
+    await waitFor(() => {
+      expect(api.pinClipboardItem).toHaveBeenCalledWith("clip-1");
+      expect(screen.getByText("Pinned")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete clipboard item: Recent clip 1/ }));
+    await waitFor(() => {
+      expect(api.deleteClipboardItem).toHaveBeenCalledWith("clip-1");
+      expect(screen.queryByText("Recent clip 1")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear history" }));
+    await waitFor(() => {
+      expect(api.clearClipboardHistory).toHaveBeenCalledOnce();
+      expect(screen.getByText("No clipboard history yet")).toBeInTheDocument();
+    });
   });
 
   it("shows the compact clipboard popup without the full window shell", () => {
@@ -270,6 +325,8 @@ describe("CopClip app shell", () => {
 
   it("documents the intentionally exposed preload API surface", () => {
     expect(exposedApiKeys).toEqual([
+      "clearClipboardHistory",
+      "deleteClipboardItem",
       "getAppInfo",
       "dismissClipboardPopup",
       "getSettings",
@@ -278,7 +335,9 @@ describe("CopClip app shell", () => {
       "onClipboardPopupOpened",
       "onSettingsChanged",
       "openSettings",
+      "pinClipboardItem",
       "restoreClipboardItem",
+      "unpinClipboardItem",
       "updateSettings"
     ]);
   });
@@ -307,6 +366,7 @@ describe("CopClip app shell", () => {
 
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: /General/ }));
     fireEvent.click(await screen.findByLabelText("Open at login"));
     fireEvent.click(screen.getByLabelText("To clipboard"));
     fireEvent.change(screen.getByLabelText("Popup location"), {
@@ -335,6 +395,7 @@ describe("CopClip app shell", () => {
 
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: /General/ }));
     const historyLimitInput = await screen.findByDisplayValue("100");
     fireEvent.change(historyLimitInput, {
       target: {
@@ -355,6 +416,7 @@ describe("CopClip app shell", () => {
 
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: /General/ }));
     const historyLimitInput = await screen.findByDisplayValue("100");
     fireEvent.change(historyLimitInput, {
       target: {
@@ -402,6 +464,48 @@ describe("CopClip app shell", () => {
     });
   });
 
+  it("pins and unpins popup history items without restoring them", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Pin clipboard item: Release checklist/ }));
+
+    await waitFor(() => {
+      expect(api.pinClipboardItem).toHaveBeenCalledWith("clip-1");
+      expect(screen.getByText("Pinned")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Unpin clipboard item: Release checklist/ }));
+
+    await waitFor(() => {
+      expect(api.unpinClipboardItem).toHaveBeenCalledWith("clip-1");
+      expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    });
+    expect(api.restoreClipboardItem).not.toHaveBeenCalled();
+  });
+
+  it("deletes and clears popup history items", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Delete clipboard item: Release checklist/ }));
+
+    await waitFor(() => {
+      expect(api.deleteClipboardItem).toHaveBeenCalledWith("clip-1");
+      expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => {
+      expect(api.clearClipboardHistory).toHaveBeenCalledOnce();
+      expect(screen.getByText("Copy text, links, or images to start history")).toBeInTheDocument();
+    });
+    expect(api.restoreClipboardItem).not.toHaveBeenCalled();
+  });
+
   it("moves selection with arrows and restores the selected item with Enter", async () => {
     const api = installClipboardApi();
 
@@ -433,6 +537,9 @@ describe("CopClip app shell", () => {
 
     await screen.findByRole("button", {
       name: /Restore clipboard item 1: Release checklist/
+    });
+    await act(async () => {
+      await Promise.resolve();
     });
     fireEvent.keyDown(window, { key: "Enter", metaKey: true, shiftKey: true });
 
@@ -513,7 +620,8 @@ describe("CopClip app shell", () => {
         type: "text",
         text: "Copied while hidden",
         preview: "Copied while hidden",
-        capturedAt: new Date(Date.UTC(2026, 4, 1, 13)).toISOString()
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 13)).toISOString(),
+        pinned: false
       }
     ]);
 
@@ -554,7 +662,8 @@ describe("CopClip app shell", () => {
         type: "text",
         text: "Copied from another app",
         preview: "Copied from another app",
-        capturedAt: new Date(Date.UTC(2026, 4, 1, 14)).toISOString()
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 14)).toISOString(),
+        pinned: false
       }
     ]);
 
@@ -585,7 +694,8 @@ describe("CopClip app shell", () => {
         type: "text",
         text: "Copied moments ago",
         preview: "Copied moments ago",
-        capturedAt: new Date(Date.UTC(2026, 4, 1, 15)).toISOString()
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 15)).toISOString(),
+        pinned: false
       },
       ...createClips()
     ]);

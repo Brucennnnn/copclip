@@ -350,6 +350,34 @@ describe("clipboard capture", () => {
     expect(execFile).not.toHaveBeenCalled();
   });
 
+  it("manages history items through trusted clipboard history IPC", async () => {
+    clipboardText = "alpha";
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    const [alpha] = captureCurrentClipboardItem({ force: true });
+    clipboardText = "beta";
+    captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc({ isTrustedSender: trustAllSenders });
+
+    const pin = ipcHandlers.get(ipcChannels.clipboardHistoryPin);
+    const unpin = ipcHandlers.get(ipcChannels.clipboardHistoryUnpin);
+    const remove = ipcHandlers.get(ipcChannels.clipboardHistoryDelete);
+    const clear = ipcHandlers.get(ipcChannels.clipboardHistoryClear);
+
+    expect(pin?.({} as never, alpha.id as never)).toEqual([
+      expect.objectContaining({ text: "alpha", pinned: true }),
+      expect.objectContaining({ text: "beta", pinned: false })
+    ]);
+    expect(unpin?.({} as never, alpha.id as never)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ text: "beta", pinned: false }),
+      expect.objectContaining({ text: "alpha", pinned: false })
+    ]));
+    expect(remove?.({} as never, alpha.id as never)).toEqual([
+      expect.objectContaining({ text: "beta" })
+    ]);
+    expect(clear?.({} as never)).toEqual([]);
+  });
+
   it("rejects clipboard history IPC from untrusted renderer senders", async () => {
     const { registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
     const isTrustedSender = vi.fn(() => false);

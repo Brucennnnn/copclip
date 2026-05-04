@@ -194,6 +194,28 @@ describe("sqlite clipboard text history", () => {
     history.close?.();
   });
 
+  it("pins, unpins, and deletes stored history items", () => {
+    let second = 0;
+    const history = createSqliteClipboardHistory(createDatabasePath(), {
+      createId: () => `clip-${second}`,
+      now: () => new Date(Date.UTC(2026, 4, 1, 12, 0, second++))
+    });
+
+    const alpha = history.captureText("alpha");
+    const beta = history.captureText("beta");
+
+    expect(history.pinItem?.(alpha?.id ?? "")).toBe(true);
+    expect(history.list()[0]).toMatchObject({ text: "alpha", pinned: true });
+
+    expect(history.unpinItem?.(alpha?.id ?? "")).toBe(true);
+    expect(itemLabels(history.list())).toEqual(["beta", "alpha"]);
+
+    expect(history.deleteItem?.(beta?.id ?? "")).toBe(true);
+    expect(history.deleteItem?.("missing")).toBe(false);
+    expect(itemLabels(history.list())).toEqual(["alpha"]);
+    history.close?.();
+  });
+
   it("prunes existing stored history when the limit changes", () => {
     let second = 0;
     const history = createSqliteClipboardHistory(createDatabasePath(), {

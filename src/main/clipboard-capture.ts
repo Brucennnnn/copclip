@@ -82,6 +82,42 @@ export function clearClipboardHistory(): ClipboardItem[] {
   return items;
 }
 
+export function deleteClipboardHistoryItem(id: string): ClipboardItem[] {
+  const deleted = clipboardHistory.deleteItem?.(id) ?? false;
+  const items = clipboardHistory.list();
+
+  if (deleted) {
+    sendClipboardHistoryChanged(items);
+  }
+
+  debugLog("capture", "delete clipboard history item", { deleted, historyCount: items.length, id });
+  return items;
+}
+
+export function pinClipboardHistoryItem(id: string): ClipboardItem[] {
+  const pinned = clipboardHistory.pinItem?.(id) ?? false;
+  const items = clipboardHistory.list();
+
+  if (pinned) {
+    sendClipboardHistoryChanged(items);
+  }
+
+  debugLog("capture", "pin clipboard history item", { pinned, historyCount: items.length, id });
+  return items;
+}
+
+export function unpinClipboardHistoryItem(id: string): ClipboardItem[] {
+  const unpinned = clipboardHistory.unpinItem?.(id) ?? false;
+  const items = clipboardHistory.list();
+
+  if (unpinned) {
+    sendClipboardHistoryChanged(items);
+  }
+
+  debugLog("capture", "unpin clipboard history item", { historyCount: items.length, id, unpinned });
+  return items;
+}
+
 export function updateClipboardHistoryLimit(historyLimit: number): ClipboardItem[] {
   clipboardHistory.setHistoryLimit?.(historyLimit);
   const items = clipboardHistory.list();
@@ -219,6 +255,26 @@ export function registerClipboardHistoryIpc({ isTrustedSender }: ClipboardHistor
     const items = clipboardHistory.list(query);
     debugLog("ipc", "list clipboard history", { query: query ?? "", resultCount: items.length });
     return items;
+  });
+
+  ipcMain.handle(ipcChannels.clipboardHistoryClear, (event) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryClear, allRendererSurfaces, isTrustedSender);
+    return clearClipboardHistory();
+  });
+
+  ipcMain.handle(ipcChannels.clipboardHistoryDelete, (event, id: string) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryDelete, allRendererSurfaces, isTrustedSender);
+    return deleteClipboardHistoryItem(id);
+  });
+
+  ipcMain.handle(ipcChannels.clipboardHistoryPin, (event, id: string) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryPin, allRendererSurfaces, isTrustedSender);
+    return pinClipboardHistoryItem(id);
+  });
+
+  ipcMain.handle(ipcChannels.clipboardHistoryUnpin, (event, id: string) => {
+    assertTrustedSender(event, ipcChannels.clipboardHistoryUnpin, allRendererSurfaces, isTrustedSender);
+    return unpinClipboardHistoryItem(id);
   });
 
   ipcMain.handle(ipcChannels.clipboardHistoryRestore, (event, id: string) => {

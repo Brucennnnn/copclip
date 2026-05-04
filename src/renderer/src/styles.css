@@ -162,6 +162,21 @@ select {
   border-radius: 50%;
 }
 
+.settings-icon-history::before {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.settings-icon-history::after {
+  width: 6px;
+  height: 5px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translate(2px, -1px);
+}
+
 .settings-icon-hand::before {
   width: 10px;
   height: 16px;
@@ -590,6 +605,118 @@ h2 {
   justify-content: flex-end;
 }
 
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.history-clear-button,
+.clear-history-button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border: 1px solid var(--settings-border);
+  border-radius: 8px;
+  background: #303333;
+  color: var(--settings-fg);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.history-clear-button:disabled,
+.clear-history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.history-card {
+  overflow: visible;
+}
+
+.history-item-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-bottom: 1px solid var(--settings-border);
+}
+
+.history-item-row:last-child {
+  border-bottom: 0;
+}
+
+.history-item-main {
+  min-width: 0;
+}
+
+.history-item-meta {
+  display: block;
+  margin-top: 7px;
+  color: var(--settings-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.history-empty {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  color: var(--settings-muted);
+  font-size: 13px;
+}
+
+.clip-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clip-action {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.history-card .clip-action {
+  border-color: #4a4f4f;
+  background: #303333;
+  color: var(--settings-fg);
+}
+
+.clip-action:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--accent) 45%, var(--border));
+}
+
+.clip-action.danger:hover:not(:disabled) {
+  border-color: oklch(58% 0.2 25);
+}
+
+.pin-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in oklch, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent-soft) 72%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .clipboard-popup {
   height: 100vh;
   overflow: hidden;
@@ -612,6 +739,19 @@ h2 {
   margin-bottom: 14px;
   app-region: drag;
   -webkit-app-region: drag;
+}
+
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-row .clear-history-button {
+  min-height: 26px;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 h1 {
@@ -673,6 +813,11 @@ kbd {
   -webkit-app-region: no-drag;
 }
 
+.clip-shell {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
 .clip {
   min-height: 86px;
   display: grid;
@@ -680,15 +825,25 @@ kbd {
   gap: 12px;
   align-items: start;
   width: 100%;
-  padding: 15px 18px;
+  padding: 15px 112px 15px 18px;
   border: 0;
-  border-bottom: 1px solid var(--border);
   color: inherit;
   text-align: left;
   background: transparent;
   cursor: pointer;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.clip-shell > .clip-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.clip-shell.pinned .clip-icon {
+  border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+  color: var(--accent);
 }
 
 .clip > div:nth-child(2) {

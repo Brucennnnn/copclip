@@ -106,7 +106,8 @@ function toClipboardItem(row: ClipboardRow): ClipboardItem {
       imageDataUrl: toImageDataUrl(row.image_data ?? Buffer.alloc(0)),
       width: row.image_width ?? 0,
       height: row.image_height ?? 0,
-      capturedAt: row.captured_at
+      capturedAt: row.captured_at,
+      pinned: row.pinned === 1
     };
   }
 
@@ -117,7 +118,8 @@ function toClipboardItem(row: ClipboardRow): ClipboardItem {
       text: row.text ?? "",
       url: row.url ?? row.text ?? "",
       preview: row.preview,
-      capturedAt: row.captured_at
+      capturedAt: row.captured_at,
+      pinned: row.pinned === 1
     };
   }
 
@@ -126,7 +128,8 @@ function toClipboardItem(row: ClipboardRow): ClipboardItem {
     type: "text",
     text: row.text ?? "",
     preview: row.preview,
-    capturedAt: row.captured_at
+    capturedAt: row.captured_at,
+    pinned: row.pinned === 1
   };
 }
 
@@ -292,7 +295,9 @@ export function createSqliteClipboardHistory(
     WHERE lower(coalesce(text, '') || ' ' || coalesce(url, '') || ' ' || preview) LIKE @query ESCAPE '\\'
     ORDER BY pinned DESC, captured_at DESC
   `);
+  const deleteStatement = database.prepare("DELETE FROM clipboard_items WHERE id = ?");
   const pinStatement = database.prepare("UPDATE clipboard_items SET pinned = 1 WHERE id = ?");
+  const unpinStatement = database.prepare("UPDATE clipboard_items SET pinned = 0 WHERE id = ?");
   const clearStatement = database.prepare("DELETE FROM clipboard_items");
   const pruneStatement = database.prepare(`
     DELETE FROM clipboard_items
@@ -424,6 +429,17 @@ export function createSqliteClipboardHistory(
     return result.changes > 0;
   }
 
+  function unpinItem(id: string): boolean {
+    const result = unpinStatement.run(id);
+    pruneHistory();
+    return result.changes > 0;
+  }
+
+  function deleteItem(id: string): boolean {
+    const result = deleteStatement.run(id);
+    return result.changes > 0;
+  }
+
   function clear(): void {
     clearStatement.run();
   }
@@ -438,9 +454,11 @@ export function createSqliteClipboardHistory(
     captureText,
     clear,
     close: () => database.close(),
+    deleteItem,
     findById,
     list,
     pinItem,
-    setHistoryLimit
+    setHistoryLimit,
+    unpinItem
   };
 }

@@ -9,6 +9,8 @@ export type SettingsUpdateResult = {
 };
 
 export type CopClipApi = {
+  clearClipboardHistory: () => Promise<ClipboardItem[]>;
+  deleteClipboardItem: (id: string) => Promise<ClipboardItem[]>;
   getAppInfo: () => AppInfo;
   dismissClipboardPopup: () => Promise<void>;
   getSettings: () => Promise<CopClipSettings>;
@@ -17,11 +19,15 @@ export type CopClipApi = {
   onClipboardPopupOpened: (callback: (items: ClipboardItem[]) => void) => () => void;
   onSettingsChanged: (callback: (settings: CopClipSettings) => void) => () => void;
   openSettings: () => Promise<void>;
+  pinClipboardItem: (id: string) => Promise<ClipboardItem[]>;
   restoreClipboardItem: (id: string) => Promise<boolean>;
+  unpinClipboardItem: (id: string) => Promise<ClipboardItem[]>;
   updateSettings: (patch: CopClipSettingsPatch) => Promise<SettingsUpdateResult>;
 };
 
 export const exposedApiKeys = [
+  "clearClipboardHistory",
+  "deleteClipboardItem",
   "getAppInfo",
   "dismissClipboardPopup",
   "getSettings",
@@ -30,6 +36,8 @@ export const exposedApiKeys = [
   "onClipboardPopupOpened",
   "onSettingsChanged",
   "openSettings",
+  "pinClipboardItem",
   "restoreClipboardItem",
+  "unpinClipboardItem",
   "updateSettings"
 ] as const;

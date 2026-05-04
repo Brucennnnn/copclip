@@ -5,6 +5,7 @@ type ClipboardBaseItem = {
   type: ClipboardItemType;
   preview: string;
   capturedAt: string;
+  pinned: boolean;
 };
 
 export type ClipboardTextItem = ClipboardBaseItem & {
@@ -37,11 +38,13 @@ export type ClipboardHistory = {
   captureImage: (image: ClipboardImagePayload) => ClipboardImageItem | null;
   captureText: (text: string) => ClipboardTextItem | ClipboardLinkItem | null;
   clear: () => void;
+  deleteItem?: (id: string) => boolean;
   findById: (id: string) => ClipboardItem | undefined;
   list: (query?: string) => ClipboardItem[];
   close?: () => void;
   pinItem?: (id: string) => boolean;
   setHistoryLimit?: (limit: number) => void;
+  unpinItem?: (id: string) => boolean;
 };
 
 type ClipboardHistoryOptions = {
@@ -148,7 +151,30 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
   const items: ClipboardItem[] = [];
 
   function pruneHistory(): void {
-    items.splice(historyLimit);
+    let unpinnedCount = 0;
+
+    for (let index = 0; index < items.length; index++) {
+      if (items[index].pinned) {
+        continue;
+      }
+
+      unpinnedCount++;
+
+      if (unpinnedCount > historyLimit) {
+        items.splice(index, 1);
+        index--;
+      }
+    }
+  }
+
+  function sortHistory(): void {
+    items.sort((first, second) => {
+      if (first.pinned !== second.pinned) {
+        return first.pinned ? -1 : 1;
+      }
+
+      return second.capturedAt.localeCompare(first.capturedAt);
+    });
   }
 
   function captureText(text: string): ClipboardTextItem | ClipboardLinkItem | null {
@@ -174,6 +200,7 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
       } as ClipboardTextItem | ClipboardLinkItem;
 
       items.unshift(updated);
+      sortHistory();
       return updated;
     }
 
@@ -184,18 +211,21 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
           text: normalized,
           url,
           preview: previewText(normalized, previewLength),
-          capturedAt
+          capturedAt,
+          pinned: false
         }
       : {
           id: createId(),
           type: "text",
           text: normalized,
           preview: previewText(normalized, previewLength),
-          capturedAt
+          capturedAt,
+          pinned: false
         };
 
     items.unshift(item);
     pruneHistory();
+    sortHistory();
     return item;
   }
 
@@ -222,6 +252,7 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
       };
 
       items.unshift(updated);
+      sortHistory();
       return updated;
     }
 
@@ -232,11 +263,13 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
       width: normalized.width,
       height: normalized.height,
       preview,
-      capturedAt
+      capturedAt,
+      pinned: false
     };
 
     items.unshift(item);
     pruneHistory();
+    sortHistory();
     return item;
   }
 
@@ -258,6 +291,42 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
     items.length = 0;
   }
 
+  function deleteItem(id: string): boolean {
+    const index = items.findIndex((item) => item.id === id);
+
+    if (index < 0) {
+      return false;
+    }
+
+    items.splice(index, 1);
+    return true;
+  }
+
+  function pinItem(id: string): boolean {
+    const item = items.find((candidate) => candidate.id === id);
+
+    if (!item) {
+      return false;
+    }
+
+    item.pinned = true;
+    sortHistory();
+    return true;
+  }
+
+  function unpinItem(id: string): boolean {
+    const item = items.find((candidate) => candidate.id === id);
+
+    if (!item) {
+      return false;
+    }
+
+    item.pinned = false;
+    sortHistory();
+    pruneHistory();
+    return true;
+  }
+
   function setHistoryLimit(limit: number): void {
     historyLimit = Math.max(1, limit);
     pruneHistory();
@@ -267,8 +336,11 @@ export function createClipboardHistory(options: ClipboardHistoryOptions = {}): C
     captureImage,
     captureText,
     clear,
+    deleteItem,
     findById,
     list,
-    setHistoryLimit
+    pinItem,
+    setHistoryLimit,
+    unpinItem
   };
 }
