@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
 import { exposedApiKeys } from "../src/preload/api";
 import { defaultCopClipSettings, type CopClipSettings, type CopClipSettingsPatch } from "../src/shared/app-settings";
-import type { ClipboardTextItem } from "../src/shared/clipboard-history";
+import { clipboardItemSearchText, type ClipboardItem } from "../src/shared/clipboard-history";
+
+const pngDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 afterEach(() => {
   cleanup();
@@ -11,7 +13,7 @@ afterEach(() => {
   window.history.pushState({}, "", "/");
 });
 
-function createClips(): ClipboardTextItem[] {
+function createClips(): ClipboardItem[] {
   const capturedAt = new Date(Date.UTC(2026, 4, 1, 12)).toISOString();
 
   return [
@@ -32,7 +34,7 @@ function createClips(): ClipboardTextItem[] {
   ];
 }
 
-function createManyClips(): ClipboardTextItem[] {
+function createManyClips(): ClipboardItem[] {
   return Array.from({ length: 5 }, (_, index) => ({
     id: `clip-${index + 1}`,
     type: "text" as const,
@@ -42,9 +44,33 @@ function createManyClips(): ClipboardTextItem[] {
   }));
 }
 
+function createMixedClips(): ClipboardItem[] {
+  const capturedAt = new Date(Date.UTC(2026, 4, 1, 12)).toISOString();
+
+  return [
+    {
+      id: "clip-link",
+      type: "link",
+      text: "https://example.com/docs",
+      url: "https://example.com/docs",
+      preview: "https://example.com/docs",
+      capturedAt
+    },
+    {
+      id: "clip-image",
+      type: "image",
+      imageDataUrl: pngDataUrl,
+      width: 1,
+      height: 1,
+      preview: "Image 1x1",
+      capturedAt
+    }
+  ];
+}
+
 function installClipboardApi(clips = createClips()) {
-  let popupOpenedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
-  let historyChangedCallback: ((items: ClipboardTextItem[]) => void) | undefined;
+  let popupOpenedCallback: ((items: ClipboardItem[]) => void) | undefined;
+  let historyChangedCallback: ((items: ClipboardItem[]) => void) | undefined;
   let settingsChangedCallback: ((settings: CopClipSettings) => void) | undefined;
   let currentClips = clips;
   let currentSettings = defaultCopClipSettings;
@@ -55,14 +81,14 @@ function installClipboardApi(clips = createClips()) {
     listClipboardHistory: vi.fn(async (query = "") => {
       const normalizedQuery = query.toLocaleLowerCase();
       return normalizedQuery
-        ? currentClips.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
+        ? currentClips.filter((item) => clipboardItemSearchText(item).toLocaleLowerCase().includes(normalizedQuery))
         : currentClips;
     }),
-    onClipboardHistoryChanged: vi.fn((callback: (items: ClipboardTextItem[]) => void) => {
+    onClipboardHistoryChanged: vi.fn((callback: (items: ClipboardItem[]) => void) => {
       historyChangedCallback = callback;
       return () => undefined;
     }),
-    onClipboardPopupOpened: vi.fn((callback: (items: ClipboardTextItem[]) => void) => {
+    onClipboardPopupOpened: vi.fn((callback: (items: ClipboardItem[]) => void) => {
       popupOpenedCallback = callback;
       return () => undefined;
     }),
@@ -76,7 +102,7 @@ function installClipboardApi(clips = createClips()) {
     emitHistoryChanged: () => {
       historyChangedCallback?.(currentClips);
     },
-    replaceClips: (nextClips: ClipboardTextItem[]) => {
+    replaceClips: (nextClips: ClipboardItem[]) => {
       currentClips = nextClips;
     },
     restoreClipboardItem: vi.fn(async () => true),
@@ -147,12 +173,12 @@ describe("CopClip app shell", () => {
     expect(screen.queryByLabelText("Clipboard popup")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("2 text clips")).toBeInTheDocument();
+      expect(screen.getByText("2 clips")).toBeInTheDocument();
       expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
     });
   });
 
-  it("limits the desktop recent text clips list to the three latest clips", async () => {
+  it("limits the desktop recent clips list to the three latest clips", async () => {
     installClipboardApi(createManyClips());
     window.history.pushState({}, "", "/?surface=desktop");
 
@@ -168,6 +194,28 @@ describe("CopClip app shell", () => {
     });
   });
 
+  it("renders desktop image clips with the constrained thumbnail class", async () => {
+    installClipboardApi([
+      {
+        id: "clip-image",
+        type: "image",
+        imageDataUrl: pngDataUrl,
+        width: 460,
+        height: 996,
+        preview: "Image 460x996",
+        capturedAt: new Date(Date.UTC(2026, 4, 1, 12)).toISOString()
+      }
+    ]);
+    window.history.pushState({}, "", "/?surface=desktop");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("IMG · Image 460x996")).toBeInTheDocument();
+    });
+    expect(document.querySelector(".desktop-clip-thumbnail")).toHaveAttribute("src", pngDataUrl);
+  });
+
   it("updates desktop shell history when clipboard text changes", async () => {
     const api = installClipboardApi();
     window.history.pushState({}, "", "/?surface=desktop");
@@ -175,7 +223,7 @@ describe("CopClip app shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("2 text clips")).toBeInTheDocument();
+      expect(screen.getByText("2 clips")).toBeInTheDocument();
     });
 
     api.replaceClips([
@@ -194,7 +242,7 @@ describe("CopClip app shell", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("3 text clips")).toBeInTheDocument();
+      expect(screen.getByText("3 clips")).toBeInTheDocument();
       expect(screen.getAllByText("Desktop shell clip").length).toBeGreaterThan(0);
     });
   });
@@ -208,6 +256,22 @@ describe("CopClip app shell", () => {
     expect(screen.queryByLabelText("Close clipboard popup")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("CopClip navigation")).not.toBeInTheDocument();
+  });
+
+  it("labels URL clips and shows image thumbnails in the popup", async () => {
+    installClipboardApi(createMixedClips());
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: https:\/\/example.com\/docs/
+      })).toBeInTheDocument();
+      expect(screen.getByText("URL")).toBeInTheDocument();
+      expect(screen.getByText("IMG")).toBeInTheDocument();
+      expect(screen.getAllByText("Image 1x1").length).toBeGreaterThan(0);
+    });
+    expect(document.querySelector(".clip-image-preview img")).toHaveAttribute("src", pngDataUrl);
   });
 
   it("documents the intentionally exposed preload API surface", () => {

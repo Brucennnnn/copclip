@@ -1,65 +1,161 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ClipboardItem } from "../src/shared/clipboard-history";
 
 let clipboardText = "";
 const windows: unknown[] = [];
+const ipcHandlers = new Map<string, (...args: never[]) => unknown>();
+const pngData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const pngDataUrl = `data:image/png;base64,${pngData}`;
+const pngBuffer = Buffer.from(pngData, "base64");
+const writeText = vi.fn();
+const writeImage = vi.fn();
+const hideWindow = vi.fn();
+const isTrustedAccessibilityClient = vi.fn(() => true);
+const execFile = vi.fn(
+  (_file: string, _args: string[], _options: object, callback: (error: Error | null) => void) => {
+    callback(null);
+    return {};
+  }
+);
+const execFileSync = vi.fn(() => "com.example.Editor\n");
+
+type MockNativeImage = {
+  isEmpty: () => boolean;
+  toPNG: () => Buffer;
+  getSize: () => { width: number; height: number };
+};
+
+function createEmptyImage(): MockNativeImage {
+  return {
+    isEmpty: () => true,
+    toPNG: () => Buffer.alloc(0),
+    getSize: () => ({ width: 0, height: 0 })
+  };
+}
+
+function createClipboardImage(): MockNativeImage {
+  return {
+    isEmpty: () => false,
+    toPNG: () => pngBuffer,
+    getSize: () => ({ width: 1, height: 1 })
+  };
+}
+
+let clipboardImage = createEmptyImage();
+
+function itemLabels(items: ClipboardItem[]): string[] {
+  return items.map((item) => (item.type === "image" ? item.preview : item.text));
+}
 
 vi.mock("electron", () => ({
   BrowserWindow: {
+    fromWebContents: () => ({ hide: hideWindow }),
     getAllWindows: () => windows
   },
   clipboard: {
+    readImage: () => clipboardImage,
     readText: () => clipboardText,
-    writeText: vi.fn()
+    writeImage,
+    writeText
   },
   ipcMain: {
-    handle: vi.fn()
+    handle: vi.fn((channel: string, handler: (...args: never[]) => unknown) => {
+      ipcHandlers.set(channel, handler);
+    })
+  },
+  nativeImage: {
+    createFromDataURL: vi.fn((dataUrl: string) => (dataUrl === pngDataUrl ? createClipboardImage() : createEmptyImage()))
+  },
+  systemPreferences: {
+    isTrustedAccessibilityClient
   }
+}));
+
+vi.mock("node:child_process", () => ({
+  default: {
+    execFile,
+    execFileSync
+  },
+  execFile,
+  execFileSync
 }));
 
 describe("clipboard capture", () => {
   beforeEach(() => {
     clipboardText = "";
+    clipboardImage = createEmptyImage();
     windows.length = 0;
+    ipcHandlers.clear();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    isTrustedAccessibilityClient.mockReturnValue(true);
+    execFile.mockImplementation(
+      (_file: string, _args: string[], _options: object, callback: (error: Error | null) => void) => {
+        callback(null);
+        return {};
+      }
+    );
+    execFileSync.mockReturnValue("com.example.Editor\n");
     vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("can force-capture the startup clipboard when the popup opens", async () => {
     clipboardText = "already copied";
     const {
-      captureCurrentClipboardText,
+      captureCurrentClipboardItem,
       clipboardHistory,
-      startTextClipboardCapture,
-      stopTextClipboardCapture
+      startClipboardCapture,
+      stopClipboardCapture
     } = await import("../src/main/clipboard-capture");
 
-    startTextClipboardCapture();
-    const items = captureCurrentClipboardText({ force: true });
-    stopTextClipboardCapture();
-    expect(items.map((item) => item.text)).toEqual(["already copied"]);
-    expect(clipboardHistory.list().map((item) => item.text)).toEqual(["already copied"]);
+    startClipboardCapture();
+    const items = captureCurrentClipboardItem({ force: true });
+    stopClipboardCapture();
+    expect(itemLabels(items)).toEqual(["already copied"]);
+    expect(itemLabels(clipboardHistory.list())).toEqual(["already copied"]);
   });
 
   it("captures the current clipboard when polling starts", async () => {
     clipboardText = "copied before launch";
-    const { clipboardHistory, startTextClipboardCapture, stopTextClipboardCapture } = await import("../src/main/clipboard-capture");
+    const { clipboardHistory, startClipboardCapture, stopClipboardCapture } = await import("../src/main/clipboard-capture");
 
-    startTextClipboardCapture();
-    stopTextClipboardCapture();
+    startClipboardCapture();
+    stopClipboardCapture();
 
-    expect(clipboardHistory.list().map((item) => item.text)).toEqual(["copied before launch"]);
+    expect(itemLabels(clipboardHistory.list())).toEqual(["copied before launch"]);
   });
 
   it("skips unchanged clipboard text during polling but captures it when forced", async () => {
     clipboardText = "same clipboard text";
-    const { captureCurrentClipboardText, clipboardHistory } = await import("../src/main/clipboard-capture");
+    const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
 
-    captureCurrentClipboardText();
-    captureCurrentClipboardText();
+    captureCurrentClipboardItem();
+    captureCurrentClipboardItem();
     expect(clipboardHistory.list()).toHaveLength(1);
 
-    captureCurrentClipboardText({ force: true });
+    captureCurrentClipboardItem({ force: true });
     expect(clipboardHistory.list()).toHaveLength(1);
-    expect(clipboardHistory.list()[0]?.text).toBe("same clipboard text");
+    expect(itemLabels(clipboardHistory.list())).toEqual(["same clipboard text"]);
+  });
+
+  it("captures clipboard images before falling back to text", async () => {
+    clipboardText = "image fallback text";
+    clipboardImage = createClipboardImage();
+    const { captureCurrentClipboardItem, clipboardHistory } = await import("../src/main/clipboard-capture");
+
+    captureCurrentClipboardItem({ force: true });
+
+    expect(clipboardHistory.list()[0]).toMatchObject({
+      type: "image",
+      preview: "Image 1x1",
+      imageDataUrl: pngDataUrl,
+      width: 1,
+      height: 1
+    });
   });
 
   it("captures clipboard text without sending into renderer frames", async () => {
@@ -77,9 +173,9 @@ describe("clipboard capture", () => {
         send
       }
     });
-    const { captureCurrentClipboardText } = await import("../src/main/clipboard-capture");
+    const { captureCurrentClipboardItem } = await import("../src/main/clipboard-capture");
 
-    expect(() => captureCurrentClipboardText({ force: true })).not.toThrow();
+    expect(() => captureCurrentClipboardItem({ force: true })).not.toThrow();
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -114,9 +210,9 @@ describe("clipboard capture", () => {
         send
       }
     });
-    const { captureCurrentClipboardText } = await import("../src/main/clipboard-capture");
+    const { captureCurrentClipboardItem } = await import("../src/main/clipboard-capture");
 
-    captureCurrentClipboardText();
+    captureCurrentClipboardItem();
 
     expect(send).toHaveBeenCalledWith(
       "clipboard-history:changed",
@@ -126,5 +222,80 @@ describe("clipboard capture", () => {
         })
       ])
     );
+  });
+
+  it("restores text history items and auto-pastes into the previous app", async () => {
+    vi.useFakeTimers();
+    clipboardText = "paste me";
+    const { capturePasteTargetApplication } = await import("../src/main/auto-paste");
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    capturePasteTargetApplication();
+    const [item] = captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc();
+    const restore = ipcHandlers.get("clipboard-history:restore");
+
+    expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
+    expect(writeText).toHaveBeenCalledWith("paste me");
+    expect(hideWindow).toHaveBeenCalledOnce();
+    expect(isTrustedAccessibilityClient).toHaveBeenCalledWith(true);
+
+    await vi.advanceTimersByTimeAsync(120);
+
+    expect(execFileSync).toHaveBeenCalledWith(
+      "/usr/bin/osascript",
+      ["-e", "id of application (path to frontmost application as text)"],
+      expect.objectContaining({ encoding: "utf8", timeout: 1000 })
+    );
+    expect(execFile).toHaveBeenCalledWith(
+      "/usr/bin/osascript",
+      ["-e", expect.stringContaining('tell application id "com.example.Editor" to activate')],
+      { timeout: 3000 },
+      expect.any(Function)
+    );
+  });
+
+  it("restores image history items and auto-pastes into the previous app", async () => {
+    vi.useFakeTimers();
+    clipboardImage = createClipboardImage();
+    const { capturePasteTargetApplication } = await import("../src/main/auto-paste");
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    capturePasteTargetApplication();
+    const [item] = captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc();
+    const restore = ipcHandlers.get("clipboard-history:restore");
+
+    expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
+    expect(writeImage).toHaveBeenCalledWith(expect.objectContaining({ isEmpty: expect.any(Function) }));
+    expect(hideWindow).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(120);
+
+    expect(execFile).toHaveBeenCalledWith(
+      "/usr/bin/osascript",
+      ["-e", expect.stringContaining('tell application id "com.example.Editor" to activate')],
+      { timeout: 3000 },
+      expect.any(Function)
+    );
+  });
+
+  it("still restores clipboard text when accessibility permission blocks auto-paste", async () => {
+    vi.useFakeTimers();
+    isTrustedAccessibilityClient.mockReturnValue(false);
+    clipboardText = "copied but not pasted";
+    const { captureCurrentClipboardItem, registerClipboardHistoryIpc } = await import("../src/main/clipboard-capture");
+
+    const [item] = captureCurrentClipboardItem({ force: true });
+    registerClipboardHistoryIpc();
+    const restore = ipcHandlers.get("clipboard-history:restore");
+
+    expect(restore?.({ sender: {} } as never, item.id as never)).toBe(true);
+    expect(writeText).toHaveBeenCalledWith("copied but not pasted");
+    expect(hideWindow).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(120);
+
+    expect(execFile).not.toHaveBeenCalled();
   });
 });

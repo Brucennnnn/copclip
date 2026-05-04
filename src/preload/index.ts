@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { appInfo } from "../shared/app-info";
 import type { CopClipSettings } from "../shared/app-settings";
-import type { ClipboardTextItem } from "../shared/clipboard-history";
+import type { ClipboardItem } from "../shared/clipboard-history";
 import type { CopClipApi } from "./api";
 
 const copclip: CopClipApi = {
@@ -10,7 +10,7 @@ const copclip: CopClipApi = {
   getSettings: () => ipcRenderer.invoke("settings:get"),
   listClipboardHistory: (query) => ipcRenderer.invoke("clipboard-history:list", query),
   onClipboardHistoryChanged: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardItem[]) => {
       callback(items);
     };
 
@@ -30,7 +30,7 @@ const copclip: CopClipApi = {
     };
   },
   onClipboardPopupOpened: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardTextItem[]) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: ClipboardItem[]) => {
       callback(items);
     };
 

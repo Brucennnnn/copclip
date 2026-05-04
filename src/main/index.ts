@@ -2,17 +2,18 @@ import { join } from "node:path";
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { is } from "@electron-toolkit/utils";
 import {
-  captureCurrentClipboardText,
+  captureCurrentClipboardItem,
   closeClipboardHistory,
   configureClipboardHistory,
   clearClipboardHistory,
   registerClipboardHistoryIpc,
   sendToLiveWindow,
-  startTextClipboardCapture,
-  stopTextClipboardCapture,
+  startClipboardCapture,
+  stopClipboardCapture,
   updateClipboardHistoryLimit
 } from "./clipboard-capture";
 import { debugLog } from "./debug-log";
+import { capturePasteTargetApplication } from "./auto-paste";
 import { buildMenuBarTemplate } from "./menu-bar";
 import { ensureLiveWindow } from "./popup-window-state";
 import { createFileSettingsStore, type SettingsStore } from "./settings-store";
@@ -34,6 +35,16 @@ let dockHidden = false;
 let registeredHotkey = "";
 let settingsStore: SettingsStore | null = null;
 let appSettings: CopClipSettings = defaultCopClipSettings;
+let suppressDesktopShellUntil = 0;
+
+function suppressDesktopShellActivation(durationMs = 1000): void {
+  suppressDesktopShellUntil = Math.max(suppressDesktopShellUntil, Date.now() + durationMs);
+}
+
+function shouldShowDesktopShellOnActivate(): boolean {
+  const popupIsVisible = popupWindow && !popupWindow.isDestroyed() && popupWindow.isVisible();
+  return !popupIsVisible && Date.now() >= suppressDesktopShellUntil;
+}
 
 function showDesktopShell(): void {
   debugLog("desktop", "show requested");
@@ -50,13 +61,19 @@ function showDesktopShellSection(section: "settings" | "privacy"): void {
 
 function openClipboardPopup(): void {
   debugLog("popup", "open requested");
+  capturePasteTargetApplication();
   popupWindow = ensureLiveWindow(popupWindow, createClipboardPopupWindow);
+
+  suppressDesktopShellActivation();
+  if (desktopWindow && !desktopWindow.isDestroyed() && desktopWindow.isVisible()) {
+    desktopWindow.hide();
+  }
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
   const position = positionPopupNearCursor(cursor, display.workArea, appSettings.popupSize);
 
-  const items = captureCurrentClipboardText({ force: true });
+  const items = captureCurrentClipboardItem({ force: true });
   debugLog("popup", "show popup", {
     historyCount: items.length,
     x: position.x,
@@ -208,14 +225,14 @@ function refreshMenuBarMenu(): void {
         openDesktopShell: showDesktopShell,
         openPopup: openClipboardPopup,
         pauseCapture: () => {
-          stopTextClipboardCapture();
+          stopClipboardCapture();
           capturePaused = true;
         },
         quit: () => {
           app.quit();
         },
         resumeCapture: () => {
-          startTextClipboardCapture();
+          startClipboardCapture();
           capturePaused = false;
         },
         showDock: () => {
@@ -326,6 +343,7 @@ function createClipboardPopupWindow(): BrowserWindow {
 
   window.on("hide", () => {
     debugLog("window", "popup hidden");
+    suppressDesktopShellActivation();
     window.setAlwaysOnTop(false);
   });
 
@@ -368,11 +386,13 @@ app.whenReady().then(() => {
   popupWindow = createClipboardPopupWindow();
   createMenuBarController();
   registerGlobalHotkey();
-  startTextClipboardCapture();
+  startClipboardCapture();
   showDesktopShell();
 
   app.on("activate", () => {
-    showDesktopShell();
+    if (shouldShowDesktopShellOnActivate()) {
+      showDesktopShell();
+    }
   });
 });
 
@@ -386,6 +406,6 @@ app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   menuBarTray?.destroy();
   menuBarTray = null;
-  stopTextClipboardCapture();
+  stopClipboardCapture();
   closeClipboardHistory();
 });

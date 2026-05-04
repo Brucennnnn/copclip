@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultCopClipSettings, type CopClipSettings, type CopClipSettingsPatch } from "../../shared/app-settings";
-import type { ClipboardTextItem } from "../../shared/clipboard-history";
+import { clipboardItemSearchText, type ClipboardItem } from "../../shared/clipboard-history";
 import type { SettingsUpdateResult } from "../../preload/api";
 
 function formatClipAge(capturedAt: string): string {
@@ -20,15 +20,23 @@ function formatClipAge(capturedAt: string): string {
   return `${elapsedHours}h`;
 }
 
-function clipTitle(item: ClipboardTextItem): string {
+function clipTitle(item: ClipboardItem): string {
   return item.preview.length > 64 ? `${item.preview.slice(0, 61).trimEnd()}...` : item.preview;
 }
 
-function filterClips(items: ClipboardTextItem[], query: string): ClipboardTextItem[] {
+function clipKindLabel(item: ClipboardItem): string {
+  if (item.type === "image") {
+    return "IMG";
+  }
+
+  return item.type === "link" ? "URL" : "TXT";
+}
+
+function filterClips(items: ClipboardItem[], query: string): ClipboardItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
 
   return normalizedQuery
-    ? items.filter((item) => item.text.toLocaleLowerCase().includes(normalizedQuery))
+    ? items.filter((item) => clipboardItemSearchText(item).toLocaleLowerCase().includes(normalizedQuery))
     : items;
 }
 
@@ -62,7 +70,7 @@ function createSettingsDraft(settings: CopClipSettings): SettingsDraft {
 
 function DesktopShell({ settings }: { settings: CopClipSettings }) {
   const appInfo = window.copclip?.getAppInfo();
-  const [clips, setClips] = useState<ClipboardTextItem[]>([]);
+  const [clips, setClips] = useState<ClipboardItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
   const [draftSettings, setDraftSettings] = useState(() => createSettingsDraft(settings));
   const [settingsErrors, setSettingsErrors] = useState<SettingsErrors>({});
@@ -134,26 +142,26 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
             <h1>History</h1>
             <p>Review recent clips and manage CopClip configuration from the main app window.</p>
           </div>
-          <span className="status-pill">{isLoadingHistory ? "Loading" : `${clips.length} text clips`}</span>
+          <span className="status-pill">{isLoadingHistory ? "Loading" : `${clips.length} clips`}</span>
         </header>
 
         <div className="desktop-grid">
           <section className="desktop-panel" id="history" aria-label="Recent clipboard history">
             <div className="panel-heading">
-              <h2>Recent Text Clips</h2>
+              <h2>Recent Clips</h2>
               <span className="meta">{recentClips.length} shown</span>
             </div>
             <div className="desktop-list">
               {recentClips.map((clip) => (
                 <article className="desktop-clip" key={clip.id}>
-                  <strong>{clipTitle(clip)}</strong>
-                  <p>{clip.preview}</p>
+                  <strong>{clipKindLabel(clip)} · {clipTitle(clip)}</strong>
+                  {clip.type === "image" ? <img alt="" className="desktop-clip-thumbnail" src={clip.imageDataUrl} /> : <p>{clip.preview}</p>}
                   <span className="meta">{formatClipAge(clip.capturedAt)}</span>
                 </article>
               ))}
               {recentClips.length === 0 ? (
                 <div className="empty-state" role="status">
-                  {isLoadingHistory ? "Loading history" : "Copy text to start history"}
+                  {isLoadingHistory ? "Loading history" : "Copy text, links, or images to start history"}
                 </div>
               ) : null}
             </div>
@@ -285,7 +293,7 @@ function DesktopShell({ settings }: { settings: CopClipSettings }) {
 function ClipboardPopup() {
   const appInfo = window.copclip?.getAppInfo();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [clips, setClips] = useState<ClipboardTextItem[]>([]);
+  const [clips, setClips] = useState<ClipboardItem[]>([]);
   const [query, setQuery] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -358,7 +366,7 @@ function ClipboardPopup() {
     });
   }, [clips.length]);
 
-  const restoreClip = useCallback(async (clip: ClipboardTextItem | undefined) => {
+  const restoreClip = useCallback(async (clip: ClipboardItem | undefined) => {
     if (!clip || !window.copclip) {
       return;
     }
@@ -430,17 +438,17 @@ function ClipboardPopup() {
       <section className="clipboard-popup" aria-label="Clipboard popup">
         <div className="history-top">
           <div className="title-row">
-            <h1>Clipboard history</h1>
-            <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
-          </div>
-          <label className="search">
-            <span aria-hidden="true">/</span>
-            <input
-              aria-label="Search clipboard history"
-              placeholder="Search copied text"
-              ref={searchInputRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              <h1>Clipboard history</h1>
+              <span className="meta">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</span>
+            </div>
+            <label className="search">
+              <span aria-hidden="true">/</span>
+              <input
+                aria-label="Search clipboard history"
+                placeholder="Search copied text, links, or images"
+                ref={searchInputRef}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
             />
             <kbd>Esc</kbd>
           </label>
@@ -457,20 +465,27 @@ function ClipboardPopup() {
               onMouseEnter={() => setSelectedIndex(index)}
               type="button"
             >
-              <div className="clip-icon">TXT</div>
+              <div className="clip-icon">{clipKindLabel(clip)}</div>
               <div>
                 <div className="clip-title">
                   <span className="shortcut">{index + 1}</span>
                   <strong>{clipTitle(clip)}</strong>
                 </div>
-                <p>{clip.preview}</p>
+                {clip.type === "image" ? (
+                  <div className="clip-image-preview">
+                    <img alt="" src={clip.imageDataUrl} />
+                    <p>{clip.preview}</p>
+                  </div>
+                ) : (
+                  <p>{clip.preview}</p>
+                )}
               </div>
               <span className="meta">{formatClipAge(clip.capturedAt)}</span>
             </button>
           ))}
           {clips.length === 0 ? (
             <div className="empty-state" role="status">
-              {query ? "No matching text clips" : statusText === "Loading" ? "Loading history" : "Copy text to start history"}
+              {query ? "No matching clips" : statusText === "Loading" ? "Loading history" : "Copy text, links, or images to start history"}
             </div>
           ) : null}
         </div>
