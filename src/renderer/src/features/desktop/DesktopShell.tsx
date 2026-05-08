@@ -2,7 +2,7 @@ import { QuestionIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import type { CopClipSettings, CopClipSettingsPatch } from "../../../../shared/app-settings";
 import { createSettingsDraft, normalizeSettingsPage, settingStatusText, type SettingsErrors, type SettingsPage } from "../../lib/settings-draft";
-import { cx, settingsBorder, settingsCard, settingsMuted, settingsSurface } from "../../lib/styles";
+import { cx, drag, settingsBorder, settingsCard, settingsMuted, settingsSurface } from "../../lib/styles";
 import { GeneralSettingsPage } from "./GeneralSettingsPage";
 import { HistorySettingsPage } from "./HistorySettingsPage";
 import { PrivacySettingsPage } from "./PrivacySettingsPage";
@@ -89,6 +89,7 @@ export function DesktopShell({ settings }: { settings: CopClipSettings }) {
 
   return (
     <main className={cx("grid h-screen grid-cols-[190px_minmax(0,1fr)] overflow-hidden rounded-[20px] border border-[#3b4040] shadow-[0_18px_48px_rgb(0_0_0_/_42%)] max-[560px]:grid-cols-1 max-[560px]:rounded-none", settingsSurface)} aria-label="CopClip desktop shell">
+      <div className={cx("fixed left-0 right-0 top-0 z-10 h-11", drag)} data-window-drag-region="desktop" aria-hidden="true" />
       <aside className="flex min-w-0 flex-col justify-between border-r border-[#242828] bg-gradient-to-r from-[#171a1a] via-[#171b1b] to-[#1a1e1e] pb-3.5 pl-3.5 pr-2.5 pt-12 max-[560px]:border-b max-[560px]:border-r-0 max-[560px]:p-[18px]" aria-label="CopClip navigation">
         <div className="min-w-0">
           <div className="h-0" aria-hidden="true" />

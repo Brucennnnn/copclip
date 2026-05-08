@@ -231,9 +231,10 @@ describe("CopClip app shell", () => {
     const api = installClipboardApi();
     window.history.pushState({}, "", "/?surface=desktop");
 
-    render(<App />);
+    const { container } = render(<App />);
 
     expect(screen.getByLabelText("CopClip desktop shell")).toBeInTheDocument();
+    expect(container.querySelector("[data-window-drag-region='desktop']")).toHaveClass("[app-region:drag]");
     expect(screen.getByLabelText("CopClip navigation")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /History/ })).toHaveAttribute("aria-current", "page");
