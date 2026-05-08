@@ -241,6 +241,42 @@ describe("clipboard capture", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("skips clipboard capture while capture is paused", async () => {
+    clipboardText = "sensitive copied text";
+    const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
+
+    configureClipboardPrivacy({ capturePaused: true, ignoredAppBundleIds: [] });
+
+    expect(captureCurrentClipboardItem({ force: true })).toEqual([]);
+    expect(clipboardHistory.list()).toEqual([]);
+  });
+
+  it("skips clipboard capture from ignored macOS apps", async () => {
+    stubPlatform("darwin");
+    clipboardText = "password copied text";
+    execFileSync.mockReturnValue("com.example.PasswordManager\n");
+    const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
+
+    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"] });
+
+    expect(captureCurrentClipboardItem({ force: true })).toEqual([]);
+    expect(clipboardHistory.list()).toEqual([]);
+  });
+
+  it("continues clipboard capture when frontmost app detection is unavailable", async () => {
+    stubPlatform("darwin");
+    clipboardText = "normal copied text";
+    execFileSync.mockImplementation(() => {
+      throw new Error("not available");
+    });
+    const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
+
+    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"] });
+    captureCurrentClipboardItem({ force: true });
+
+    expect(itemLabels(clipboardHistory.list())).toEqual(["normal copied text"]);
+  });
+
   it("safely sends popup events to live renderer frames", async () => {
     const send = vi.fn();
     const window = {

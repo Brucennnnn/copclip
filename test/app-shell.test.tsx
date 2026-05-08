@@ -164,6 +164,8 @@ function installClipboardApi(clips = createClips()) {
 
       currentSettings = {
         ...currentSettings,
+        capturePaused:
+          typeof patch.capturePaused === "boolean" ? patch.capturePaused : currentSettings.capturePaused,
         checkForUpdatesAutomatically:
           typeof patch.checkForUpdatesAutomatically === "boolean"
             ? patch.checkForUpdatesAutomatically
@@ -174,6 +176,10 @@ function installClipboardApi(clips = createClips()) {
             : typeof patch.historyLimit === "string"
               ? Number(patch.historyLimit)
               : currentSettings.historyLimit,
+        ignoredAppBundleIds:
+          Array.isArray(patch.ignoredAppBundleIds)
+            ? patch.ignoredAppBundleIds.filter((item): item is string => typeof item === "string")
+            : currentSettings.ignoredAppBundleIds,
         popupSize: {
           width:
             typeof patch.popupSize?.width === "number"
@@ -259,6 +265,7 @@ describe("CopClip app shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Privacy/ }));
     expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
     expect(screen.getByText("Ignore Applications")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pause clipboard capture")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
     expect(screen.getByRole("heading", { name: "Shortcuts" })).toBeInTheDocument();
@@ -398,6 +405,31 @@ describe("CopClip app shell", () => {
       expect(api.updateSettings).toHaveBeenCalledWith({
         pasteWithFormattingShortcut: "CommandOrControl+Shift+Return"
       });
+    });
+  });
+
+  it("updates privacy capture controls and ignored applications", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop#privacy");
+
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText("Pause clipboard capture"));
+    fireEvent.change(screen.getByLabelText("Ignored app bundle ID"), {
+      target: { value: "com.example.PasswordManager" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add ignored app" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({ capturePaused: true });
+      expect(api.updateSettings).toHaveBeenCalledWith({ ignoredAppBundleIds: ["com.example.PasswordManager"] });
+      expect(screen.getByText("com.example.PasswordManager")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove ignored app com.example.PasswordManager" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({ ignoredAppBundleIds: [] });
     });
   });
 

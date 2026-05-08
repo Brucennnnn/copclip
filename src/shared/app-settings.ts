@@ -8,7 +8,9 @@ export type PopupSize = {
 
 export type CopClipSettings = {
   checkForUpdatesAutomatically: boolean;
+  capturePaused: boolean;
   historyLimit: number;
+  ignoredAppBundleIds: string[];
   launchAtLogin: boolean;
   openClipboardHistoryShortcut: string;
   pasteAutomatically: boolean;
@@ -20,8 +22,10 @@ export type CopClipSettings = {
 
 export type CopClipSettingsPatch = Partial<{
   checkForUpdatesAutomatically: unknown;
+  capturePaused: unknown;
   globalHotkey: unknown;
   historyLimit: unknown;
+  ignoredAppBundleIds: unknown;
   launchAtLogin: unknown;
   openClipboardHistoryShortcut: unknown;
   pasteAutomatically: unknown;
@@ -38,7 +42,9 @@ export type SettingsValidationResult = {
 
 export const defaultCopClipSettings: CopClipSettings = {
   checkForUpdatesAutomatically: true,
+  capturePaused: false,
   historyLimit: 100,
+  ignoredAppBundleIds: [],
   launchAtLogin: false,
   openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
   pasteAutomatically: true,
@@ -59,6 +65,7 @@ const minPopupHeight = 360;
 const maxPopupHeight = 900;
 const validThemes: CopClipTheme[] = ["system", "light", "dark"];
 const validPopupPositions: PopupPositionMode[] = ["cursor", "bottom", "top", "center", "last-position"];
+const bundleIdPattern = /^[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -85,6 +92,38 @@ function readInteger(value: unknown): number | undefined {
   return undefined;
 }
 
+function normalizeIgnoredAppBundleIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const bundleIds: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return undefined;
+    }
+
+    const bundleId = item.trim();
+
+    if (!bundleId || !bundleIdPattern.test(bundleId)) {
+      return undefined;
+    }
+
+    const key = bundleId.toLocaleLowerCase();
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    bundleIds.push(bundleId);
+  }
+
+  return bundleIds;
+}
+
 export function validateSettings(
   patch: CopClipSettingsPatch,
   currentSettings: CopClipSettings = defaultCopClipSettings
@@ -102,6 +141,14 @@ export function validateSettings(
       settings.checkForUpdatesAutomatically = patch.checkForUpdatesAutomatically;
     } else {
       errors.checkForUpdatesAutomatically = "Use on or off.";
+    }
+  }
+
+  if ("capturePaused" in patch) {
+    if (typeof patch.capturePaused === "boolean") {
+      settings.capturePaused = patch.capturePaused;
+    } else {
+      errors.capturePaused = "Use on or off.";
     }
   }
 
@@ -166,6 +213,16 @@ export function validateSettings(
       errors.historyLimit = `Use a number from ${minHistoryLimit} to ${maxHistoryLimit}.`;
     } else {
       settings.historyLimit = historyLimit;
+    }
+  }
+
+  if ("ignoredAppBundleIds" in patch) {
+    const ignoredAppBundleIds = normalizeIgnoredAppBundleIds(patch.ignoredAppBundleIds);
+
+    if (!ignoredAppBundleIds) {
+      errors.ignoredAppBundleIds = "Use valid app bundle IDs.";
+    } else {
+      settings.ignoredAppBundleIds = ignoredAppBundleIds;
     }
   }
 

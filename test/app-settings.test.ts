@@ -10,7 +10,9 @@ describe("CopClip settings validation", () => {
     const result = validateSettings({
       openClipboardHistoryShortcut: "CommandOrControl+Alt+V",
       checkForUpdatesAutomatically: false,
+      capturePaused: true,
       historyLimit: "250",
+      ignoredAppBundleIds: [" com.example.Passwords ", "com.example.passwords", "com.example.Vault"],
       launchAtLogin: true,
       pasteAutomatically: false,
       pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
@@ -25,7 +27,9 @@ describe("CopClip settings validation", () => {
     expect(result.errors).toEqual({});
     expect(result.settings).toEqual({
       checkForUpdatesAutomatically: false,
+      capturePaused: true,
       historyLimit: 250,
+      ignoredAppBundleIds: ["com.example.Passwords", "com.example.Vault"],
       launchAtLogin: true,
       openClipboardHistoryShortcut: "CommandOrControl+Alt+V",
       pasteAutomatically: false,
@@ -44,7 +48,9 @@ describe("CopClip settings validation", () => {
       {
         openClipboardHistoryShortcut: "V",
         checkForUpdatesAutomatically: "yes",
+        capturePaused: "yes",
         historyLimit: 0,
+        ignoredAppBundleIds: ["not-a-bundle-id"],
         launchAtLogin: "yes",
         pasteAutomatically: "yes",
         pasteWithFormattingShortcut: "V",
@@ -60,7 +66,9 @@ describe("CopClip settings validation", () => {
 
     expect(result.errors).toEqual({
       checkForUpdatesAutomatically: "Use on or off.",
+      capturePaused: "Use on or off.",
       historyLimit: "Use a number from 1 to 5000.",
+      ignoredAppBundleIds: "Use valid app bundle IDs.",
       launchAtLogin: "Use on or off.",
       openClipboardHistoryShortcut: "Use a shortcut like CommandOrControl+Shift+V.",
       pasteAutomatically: "Use on or off.",
@@ -91,7 +99,9 @@ describe("file settings store", () => {
     expect(result.errors).toEqual({});
     expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
       checkForUpdatesAutomatically: true,
+      capturePaused: false,
       historyLimit: 25,
+      ignoredAppBundleIds: [],
       launchAtLogin: false,
       openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
       pasteAutomatically: true,

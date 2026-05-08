@@ -1,14 +1,60 @@
 import { KeyIcon, MinusIcon, PasswordIcon, PlusIcon } from "@phosphor-icons/react";
-import { DisabledControl } from "../../components/DisabledControl";
+import type { Dispatch, SetStateAction } from "react";
+import { useState } from "react";
+import type { CopClipSettingsPatch } from "../../../../shared/app-settings";
+import { defaultIgnoredAppBundleIds } from "../../../../shared/ignored-app-policy";
 import { SettingsCard } from "../../components/SettingsCard";
 import { SettingsRow } from "../../components/SettingsRow";
 import { ToggleSwitch } from "../../components/ToggleSwitch";
-import { cx, settingsBorder, settingsMuted } from "../../lib/styles";
+import type { SettingsDraft, SettingsErrors } from "../../lib/settings-draft";
+import { cx, fieldClass, settingsBorder, settingsMuted } from "../../lib/styles";
 
-export function PrivacySettingsPage() {
+export function PrivacySettingsPage({
+  draftSettings,
+  settingsErrors,
+  setDraftSettings,
+  updateSettings
+}: {
+  draftSettings: SettingsDraft;
+  settingsErrors: SettingsErrors;
+  setDraftSettings: Dispatch<SetStateAction<SettingsDraft>>;
+  updateSettings: (patch: CopClipSettingsPatch) => Promise<void>;
+}) {
+  const [bundleIdInput, setBundleIdInput] = useState("");
+
+  function updateIgnoredAppBundleIds(ignoredAppBundleIds: string[]) {
+    setDraftSettings((current) => ({ ...current, ignoredAppBundleIds }));
+    void updateSettings({ ignoredAppBundleIds });
+  }
+
+  function addIgnoredAppBundleId() {
+    const bundleId = bundleIdInput.trim();
+
+    if (!bundleId) {
+      return;
+    }
+
+    updateIgnoredAppBundleIds([...draftSettings.ignoredAppBundleIds, bundleId]);
+    setBundleIdInput("");
+  }
+
+  function removeIgnoredAppBundleId(bundleId: string) {
+    updateIgnoredAppBundleIds(draftSettings.ignoredAppBundleIds.filter((ignoredBundleId) => ignoredBundleId !== bundleId));
+  }
+
   return (
     <>
       <SettingsCard>
+        <SettingsRow note="Temporarily stop recording new clipboard items." title="Pause clipboard capture">
+          <ToggleSwitch
+            checked={draftSettings.capturePaused}
+            label="Pause clipboard capture"
+            onChange={(capturePaused) => {
+              setDraftSettings((current) => ({ ...current, capturePaused }));
+              void updateSettings({ capturePaused });
+            }}
+          />
+        </SettingsRow>
         <SettingsRow note="Allow CopClip to appear to others when you share your screen." title="Show during screen sharing">
           <ToggleSwitch checked={false} label="Show during screen sharing" disabled />
         </SettingsRow>
@@ -27,13 +73,45 @@ export function PrivacySettingsPage() {
       </SettingsCard>
 
       <h2 className="mx-3.5 -mb-2 mt-[18px] text-base font-bold tracking-[-0.02em] text-[#e8e8e8]">Ignore Applications</h2>
-      <p className={cx("mx-3.5 -mt-2 text-xs leading-snug max-[560px]:text-sm", settingsMuted)}>Do not save content copied from the applications below.</p>
+      <p className={cx("mx-3.5 -mt-2 text-xs leading-snug max-[560px]:text-sm", settingsMuted)}>Do not save content copied while these macOS bundle IDs are frontmost. If detection is unavailable, capture continues normally.</p>
       <SettingsCard>
-        <div className={cx("flex min-h-[52px] items-center gap-3 border-b px-3.5 py-2.5 text-sm font-semibold text-[#e8e8e8]", settingsBorder)}><KeyIcon aria-hidden="true" className="h-8 w-8 rounded-lg bg-[#303333] p-1.5 text-[#c8c8c8]" weight="duotone" />Keychain Access</div>
-        <div className={cx("flex min-h-[52px] items-center gap-3 border-b px-3.5 py-2.5 text-sm font-semibold text-[#e8e8e8]", settingsBorder)}><PasswordIcon aria-hidden="true" className="h-8 w-8 rounded-lg bg-[#303333] p-1.5 text-[#ffd449]" weight="duotone" />Passwords</div>
-        <div className="flex gap-px bg-[#303333] px-2.5 py-1.5" aria-label="Ignored application actions">
-          <DisabledControl label="Adding ignored apps is planned"><PlusIcon aria-hidden="true" size={14} weight="bold" /></DisabledControl>
-          <DisabledControl label="Removing ignored apps is planned"><MinusIcon aria-hidden="true" size={14} weight="bold" /></DisabledControl>
+        {defaultIgnoredAppBundleIds.map((bundleId, index) => (
+          <div className={cx("flex min-h-[52px] items-center gap-3 border-b px-3.5 py-2.5 text-sm font-semibold text-[#e8e8e8]", settingsBorder)} key={bundleId}>
+            {index === 0 ? <KeyIcon aria-hidden="true" className="h-8 w-8 rounded-lg bg-[#303333] p-1.5 text-[#c8c8c8]" weight="duotone" /> : <PasswordIcon aria-hidden="true" className="h-8 w-8 rounded-lg bg-[#303333] p-1.5 text-[#ffd449]" weight="duotone" />}
+            <span className="min-w-0 truncate">{bundleId}</span>
+            <span className={cx("ml-auto shrink-0 text-[11px]", settingsMuted)}>Default</span>
+          </div>
+        ))}
+        {draftSettings.ignoredAppBundleIds.map((bundleId) => (
+          <div className={cx("flex min-h-[52px] items-center gap-3 border-b px-3.5 py-2.5 text-sm font-semibold text-[#e8e8e8]", settingsBorder)} key={bundleId}>
+            <PasswordIcon aria-hidden="true" className="h-8 w-8 rounded-lg bg-[#303333] p-1.5 text-[#ffd449]" weight="duotone" />
+            <span className="min-w-0 truncate">{bundleId}</span>
+            <button aria-label={`Remove ignored app ${bundleId}`} className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#343838] bg-[#303333] text-[#e8e8e8]" type="button" onClick={() => removeIgnoredAppBundleId(bundleId)}>
+              <MinusIcon aria-hidden="true" size={14} weight="bold" />
+            </button>
+          </div>
+        ))}
+        <div className="grid gap-2 bg-[#303333] px-2.5 py-2" aria-label="Ignored application actions">
+          <div className="flex gap-2">
+            <input
+              aria-invalid={Boolean(settingsErrors.ignoredAppBundleIds)}
+              aria-label="Ignored app bundle ID"
+              className={fieldClass}
+              placeholder="com.example.PasswordManager"
+              value={bundleIdInput}
+              onChange={(event) => setBundleIdInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addIgnoredAppBundleId();
+                }
+              }}
+            />
+            <button aria-label="Add ignored app" className="inline-flex h-[34px] w-9 shrink-0 items-center justify-center rounded-lg border border-[#343838] bg-[#222525] text-[#e8e8e8]" type="button" onClick={addIgnoredAppBundleId}>
+              <PlusIcon aria-hidden="true" size={14} weight="bold" />
+            </button>
+          </div>
+          {settingsErrors.ignoredAppBundleIds ? <em className="text-[11px] not-italic leading-snug text-red-500">{settingsErrors.ignoredAppBundleIds}</em> : null}
         </div>
       </SettingsCard>
     </>

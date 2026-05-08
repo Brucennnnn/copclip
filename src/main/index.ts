@@ -6,6 +6,7 @@ import {
   captureCurrentClipboardItem,
   closeClipboardHistory,
   configureClipboardHistory,
+  configureClipboardPrivacy,
   clearClipboardHistory,
   registerClipboardHistoryIpc,
   sendToLiveWindow,
@@ -64,8 +65,14 @@ function applyLaunchAtLogin(launchAtLogin: boolean): void {
 function applyRuntimeSettings(settings: CopClipSettings): void {
   applyLaunchAtLogin(settings.launchAtLogin);
   configureAutoPaste({ pasteAutomatically: settings.pasteAutomatically });
+  configureClipboardPrivacy({
+    capturePaused: settings.capturePaused,
+    ignoredAppBundleIds: settings.ignoredAppBundleIds
+  });
   debugLog("settings", "runtime settings applied", {
+    capturePaused: settings.capturePaused,
     checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
+    ignoredAppCount: settings.ignoredAppBundleIds.length,
     launchAtLogin: settings.launchAtLogin,
     pasteAutomatically: settings.pasteAutomatically
   });
@@ -188,6 +195,40 @@ function sendSettingsChanged(): void {
   });
 }
 
+function setCapturePaused(paused: boolean): void {
+  capturePaused = paused;
+  configureClipboardPrivacy({
+    capturePaused: paused,
+    ignoredAppBundleIds: appSettings.ignoredAppBundleIds
+  });
+
+  if (paused) {
+    stopClipboardCapture();
+  } else {
+    startClipboardCapture();
+  }
+
+  refreshMenuBarMenu();
+}
+
+function updateCapturePausedSetting(paused: boolean): void {
+  if (settingsStore) {
+    const result = settingsStore.update({ capturePaused: paused });
+
+    if (!hasSettingsValidationErrors(result)) {
+      appSettings = result.settings;
+    }
+  } else {
+    appSettings = {
+      ...appSettings,
+      capturePaused: paused
+    };
+  }
+
+  setCapturePaused(paused);
+  sendSettingsChanged();
+}
+
 function registerSettingsIpc(): void {
   ipcMain.handle(ipcChannels.settingsGet, (event) => {
     assertTrustedIpcSender(event, ipcChannels.settingsGet, allRendererSurfaces);
@@ -236,6 +277,20 @@ function registerSettingsIpc(): void {
 
     if (appSettings.historyLimit !== previousSettings.historyLimit) {
       updateClipboardHistoryLimit(appSettings.historyLimit);
+    }
+
+    if (
+      appSettings.capturePaused !== previousSettings.capturePaused ||
+      appSettings.ignoredAppBundleIds !== previousSettings.ignoredAppBundleIds
+    ) {
+      configureClipboardPrivacy({
+        capturePaused: appSettings.capturePaused,
+        ignoredAppBundleIds: appSettings.ignoredAppBundleIds
+      });
+    }
+
+    if (appSettings.capturePaused !== previousSettings.capturePaused) {
+      setCapturePaused(appSettings.capturePaused);
     }
 
     if (appSettings.launchAtLogin !== previousSettings.launchAtLogin) {
@@ -307,15 +362,13 @@ function refreshMenuBarMenu(): void {
         openDesktopShell: showDesktopShell,
         openPopup: openClipboardPopup,
         pauseCapture: () => {
-          stopClipboardCapture();
-          capturePaused = true;
+          updateCapturePausedSetting(true);
         },
         quit: () => {
           app.quit();
         },
         resumeCapture: () => {
-          startClipboardCapture();
-          capturePaused = false;
+          updateCapturePausedSetting(false);
         },
         showDock: () => {
           app.dock?.show();
@@ -501,6 +554,7 @@ if (hasSingleInstanceLock) {
     settingsStore = createFileSettingsStore(join(app.getPath("userData"), "settings.json"));
     appSettings = settingsStore.get();
     applyRuntimeSettings(appSettings);
+    capturePaused = appSettings.capturePaused;
     configureClipboardHistory(createSqliteClipboardHistory(join(app.getPath("userData"), "clipboard-history.sqlite"), {
       historyLimit: appSettings.historyLimit
     }));
@@ -510,7 +564,9 @@ if (hasSingleInstanceLock) {
     popupWindow = createClipboardPopupWindow();
     createMenuBarController();
     registerGlobalHotkey();
-    startClipboardCapture();
+    if (!appSettings.capturePaused) {
+      startClipboardCapture();
+    }
     if (requestedStartupSurface() === "popup") {
       openClipboardPopup();
     } else {

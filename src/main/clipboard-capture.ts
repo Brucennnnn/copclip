@@ -13,8 +13,10 @@ import {
   maxClipboardImagePixels
 } from "../shared/clipboard-history";
 import { ipcChannels } from "../shared/ipc-channels";
+import { shouldIgnoreFrontmostApp } from "../shared/ignored-app-policy";
 import { schedulePasteIntoTargetApplication } from "./auto-paste";
 import { debugLog, textSummary } from "./debug-log";
+import { getFrontmostAppBundleId } from "./frontmost-app";
 import type { IpcSenderValidator } from "./renderer-trust";
 import type { RendererSurface } from "./window-paths";
 
@@ -22,6 +24,8 @@ export let clipboardHistory: ClipboardHistory = createClipboardHistory();
 
 let clipboardPollTimer: NodeJS.Timeout | null = null;
 let lastObservedSignature = "";
+let capturePaused = false;
+let ignoredAppBundleIds: string[] = [];
 
 type ClipboardHistoryIpcOptions = {
   isTrustedSender: IpcSenderValidator;
@@ -37,6 +41,11 @@ export function configureClipboardHistory(nextClipboardHistory: ClipboardHistory
 
 export function closeClipboardHistory(): void {
   clipboardHistory.close?.();
+}
+
+export function configureClipboardPrivacy(options: { capturePaused: boolean; ignoredAppBundleIds: string[] }): void {
+  capturePaused = options.capturePaused;
+  ignoredAppBundleIds = options.ignoredAppBundleIds;
 }
 
 export function sendToLiveWindow(window: BrowserWindow, channel: string, ...args: unknown[]): boolean {
@@ -203,6 +212,21 @@ function htmlPayloadFromClipboard(): { payload: ClipboardHtmlPayload; signature:
 }
 
 export function captureCurrentClipboardItem(options: { force?: boolean } = {}): ClipboardItem[] {
+  if (capturePaused) {
+    debugLog("capture", "skip clipboard capture while paused", { historyCount: clipboardHistory.list().length });
+    return clipboardHistory.list();
+  }
+
+  const frontmostBundleId = getFrontmostAppBundleId();
+
+  if (shouldIgnoreFrontmostApp(frontmostBundleId, { ignoredAppBundleIds })) {
+    debugLog("capture", "skip clipboard capture from ignored app", {
+      bundleId: frontmostBundleId ?? "",
+      historyCount: clipboardHistory.list().length
+    });
+    return clipboardHistory.list();
+  }
+
   const image = imagePayloadFromClipboard();
 
   if (image) {

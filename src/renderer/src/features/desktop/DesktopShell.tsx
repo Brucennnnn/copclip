@@ -58,7 +58,14 @@ export function DesktopShell({ settings }: { settings: CopClipSettings }) {
     }
 
     if (activePage === "privacy") {
-      return <PrivacySettingsPage />;
+      return (
+        <PrivacySettingsPage
+          draftSettings={draftSettings}
+          settingsErrors={settingsErrors}
+          setDraftSettings={setDraftSettings}
+          updateSettings={updateSettings}
+        />
+      );
     }
 
     if (activePage === "shortcuts") {

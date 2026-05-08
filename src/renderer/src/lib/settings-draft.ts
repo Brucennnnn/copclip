@@ -5,8 +5,10 @@ export type SettingsErrors = SettingsUpdateResult["errors"];
 export type SettingsPage = "history" | "general" | "privacy" | "shortcuts" | "subscription";
 
 export type SettingsDraft = {
+  capturePaused: boolean;
   checkForUpdatesAutomatically: boolean;
   historyLimit: string;
+  ignoredAppBundleIds: string[];
   launchAtLogin: boolean;
   openClipboardHistoryShortcut: string;
   pasteAutomatically: boolean;
@@ -21,8 +23,10 @@ export type SettingsDraft = {
 
 export function createSettingsDraft(settings: CopClipSettings): SettingsDraft {
   return {
+    capturePaused: settings.capturePaused,
     checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
     historyLimit: String(settings.historyLimit),
+    ignoredAppBundleIds: settings.ignoredAppBundleIds,
     launchAtLogin: settings.launchAtLogin,
     openClipboardHistoryShortcut: settings.openClipboardHistoryShortcut,
     pasteAutomatically: settings.pasteAutomatically,
