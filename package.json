@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A lightweight Electron clipboard manager for macOS.",
   "private": true,
+  "author": "CopClip contributors",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
@@ -12,6 +13,8 @@
     "rebuild:sqlite:electron": "npm_config_runtime=electron npm_config_target=$(node -p \"require('electron/package.json').version\") npm_config_disturl=https://electronjs.org/headers npm rebuild better-sqlite3 --loglevel=error",
     "rebuild:sqlite:node": "npm rebuild better-sqlite3",
     "build": "tsc --noEmit && electron-vite build",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "pack:mac:dir": "npm run build && electron-builder --mac dir",
     "test": "npm run rebuild:sqlite:node && vitest run",
     "test:watch": "npm run rebuild:sqlite:node && vitest",
     "typecheck": "tsc --noEmit"
@@ -35,6 +38,7 @@
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^41.5.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4.2.4",

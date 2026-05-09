@@ -43,6 +43,20 @@ Typecheck and build the Electron bundles:
 npm run build
 ```
 
+Package the macOS app locally:
+
+```sh
+npm run pack:mac
+```
+
+For faster packaged-app smoke testing, build only the unpacked app:
+
+```sh
+npm run pack:mac:dir
+```
+
+Packaging outputs are written to `dist/`. See `docs/packaging/macos.md` for the smoke checklist and signing notes.
+
 ## Current Scope
 
 The scaffold includes:
@@ -60,5 +74,4 @@ The scaffold includes:
 - Cursor-aware popup positioning constrained to the active display work area, with the popup above other windows while visible.
 - Tailwind CSS renderer styling with Phosphor React icons, based on `docs/design/initial-app-shell.html`.
 - Vitest coverage for the desktop shell, quick popup, exposed preload API contract, typed clipboard history, image persistence, deduplication, search behavior, restore selection, dismissal, search focus, and deterministic popup positioning.
-
-The app intentionally does not include packaging yet. That is tracked by a follow-up issue.
+- Unsigned local macOS packaging with electron-builder DMG/ZIP targets and an unpacked-app smoke test path.
