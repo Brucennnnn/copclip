@@ -11,6 +11,7 @@ export type CopClipSettings = {
   capturePaused: boolean;
   historyLimit: number;
   ignoredAppBundleIds: string[];
+  ignoredWindowsAppIdentifiers: string[];
   launchAtLogin: boolean;
   openClipboardHistoryShortcut: string;
   pasteAutomatically: boolean;
@@ -26,6 +27,7 @@ export type CopClipSettingsPatch = Partial<{
   globalHotkey: unknown;
   historyLimit: unknown;
   ignoredAppBundleIds: unknown;
+  ignoredWindowsAppIdentifiers: unknown;
   launchAtLogin: unknown;
   openClipboardHistoryShortcut: unknown;
   pasteAutomatically: unknown;
@@ -45,6 +47,7 @@ export const defaultCopClipSettings: CopClipSettings = {
   capturePaused: false,
   historyLimit: 100,
   ignoredAppBundleIds: [],
+  ignoredWindowsAppIdentifiers: [],
   launchAtLogin: false,
   openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
   pasteAutomatically: true,
@@ -66,6 +69,7 @@ const maxPopupHeight = 900;
 const validThemes: CopClipTheme[] = ["system", "light", "dark"];
 const validPopupPositions: PopupPositionMode[] = ["cursor", "bottom", "top", "center", "last-position"];
 const bundleIdPattern = /^[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$/;
+const windowsAppIdentifierPattern = /^[^\0-\u001f<>|?*"]+$/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -122,6 +126,38 @@ function normalizeIgnoredAppBundleIds(value: unknown): string[] | undefined {
   }
 
   return bundleIds;
+}
+
+function normalizeIgnoredWindowsAppIdentifiers(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const identifiers: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") {
+      return undefined;
+    }
+
+    const identifier = item.trim();
+
+    if (!identifier || !windowsAppIdentifierPattern.test(identifier)) {
+      return undefined;
+    }
+
+    const key = identifier.replace(/\\/g, "/").toLocaleLowerCase();
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    identifiers.push(identifier);
+  }
+
+  return identifiers;
 }
 
 export function validateSettings(
@@ -223,6 +259,16 @@ export function validateSettings(
       errors.ignoredAppBundleIds = "Use valid app bundle IDs.";
     } else {
       settings.ignoredAppBundleIds = ignoredAppBundleIds;
+    }
+  }
+
+  if ("ignoredWindowsAppIdentifiers" in patch) {
+    const ignoredWindowsAppIdentifiers = normalizeIgnoredWindowsAppIdentifiers(patch.ignoredWindowsAppIdentifiers);
+
+    if (!ignoredWindowsAppIdentifiers) {
+      errors.ignoredWindowsAppIdentifiers = "Use executable names or paths.";
+    } else {
+      settings.ignoredWindowsAppIdentifiers = ignoredWindowsAppIdentifiers;
     }
   }
 

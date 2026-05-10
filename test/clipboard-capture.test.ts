@@ -245,7 +245,7 @@ describe("clipboard capture", () => {
     clipboardText = "sensitive copied text";
     const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
 
-    configureClipboardPrivacy({ capturePaused: true, ignoredAppBundleIds: [] });
+    configureClipboardPrivacy({ capturePaused: true, ignoredAppBundleIds: [], ignoredWindowsAppIdentifiers: [] });
 
     expect(captureCurrentClipboardItem({ force: true })).toEqual([]);
     expect(clipboardHistory.list()).toEqual([]);
@@ -257,7 +257,22 @@ describe("clipboard capture", () => {
     execFileSync.mockReturnValue("com.example.PasswordManager\n");
     const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
 
-    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"] });
+    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"], ignoredWindowsAppIdentifiers: [] });
+
+    expect(captureCurrentClipboardItem({ force: true })).toEqual([]);
+    expect(clipboardHistory.list()).toEqual([]);
+  });
+
+  it("skips clipboard capture from ignored Windows apps", async () => {
+    stubPlatform("win32");
+    clipboardText = "password copied text";
+    execFileSync.mockReturnValue(JSON.stringify({
+      executableName: "PasswordManager.exe",
+      executablePath: "C:\\Program Files\\PasswordManager\\PasswordManager.exe"
+    }));
+    const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
+
+    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: [], ignoredWindowsAppIdentifiers: ["passwordmanager.exe"] });
 
     expect(captureCurrentClipboardItem({ force: true })).toEqual([]);
     expect(clipboardHistory.list()).toEqual([]);
@@ -271,7 +286,7 @@ describe("clipboard capture", () => {
     });
     const { captureCurrentClipboardItem, clipboardHistory, configureClipboardPrivacy } = await import("../src/main/clipboard-capture");
 
-    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"] });
+    configureClipboardPrivacy({ capturePaused: false, ignoredAppBundleIds: ["com.example.PasswordManager"], ignoredWindowsAppIdentifiers: [] });
     captureCurrentClipboardItem({ force: true });
 
     expect(itemLabels(clipboardHistory.list())).toEqual(["normal copied text"]);

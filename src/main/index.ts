@@ -67,12 +67,14 @@ function applyRuntimeSettings(settings: CopClipSettings): void {
   configureAutoPaste({ pasteAutomatically: settings.pasteAutomatically });
   configureClipboardPrivacy({
     capturePaused: settings.capturePaused,
-    ignoredAppBundleIds: settings.ignoredAppBundleIds
+    ignoredAppBundleIds: settings.ignoredAppBundleIds,
+    ignoredWindowsAppIdentifiers: settings.ignoredWindowsAppIdentifiers
   });
   debugLog("settings", "runtime settings applied", {
     capturePaused: settings.capturePaused,
     checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
     ignoredAppCount: settings.ignoredAppBundleIds.length,
+    ignoredWindowsAppCount: settings.ignoredWindowsAppIdentifiers.length,
     launchAtLogin: settings.launchAtLogin,
     pasteAutomatically: settings.pasteAutomatically
   });
@@ -199,7 +201,8 @@ function setCapturePaused(paused: boolean): void {
   capturePaused = paused;
   configureClipboardPrivacy({
     capturePaused: paused,
-    ignoredAppBundleIds: appSettings.ignoredAppBundleIds
+    ignoredAppBundleIds: appSettings.ignoredAppBundleIds,
+    ignoredWindowsAppIdentifiers: appSettings.ignoredWindowsAppIdentifiers
   });
 
   if (paused) {
@@ -281,11 +284,13 @@ function registerSettingsIpc(): void {
 
     if (
       appSettings.capturePaused !== previousSettings.capturePaused ||
-      appSettings.ignoredAppBundleIds !== previousSettings.ignoredAppBundleIds
+      appSettings.ignoredAppBundleIds !== previousSettings.ignoredAppBundleIds ||
+      appSettings.ignoredWindowsAppIdentifiers !== previousSettings.ignoredWindowsAppIdentifiers
     ) {
       configureClipboardPrivacy({
         capturePaused: appSettings.capturePaused,
-        ignoredAppBundleIds: appSettings.ignoredAppBundleIds
+        ignoredAppBundleIds: appSettings.ignoredAppBundleIds,
+        ignoredWindowsAppIdentifiers: appSettings.ignoredWindowsAppIdentifiers
       });
     }
 

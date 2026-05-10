@@ -13,10 +13,10 @@ import {
   maxClipboardImagePixels
 } from "../shared/clipboard-history";
 import { ipcChannels } from "../shared/ipc-channels";
-import { shouldIgnoreFrontmostApp } from "../shared/ignored-app-policy";
+import { shouldIgnoreActiveApp } from "../shared/ignored-app-policy";
+import { getActiveAppIdentity } from "./active-app";
 import { schedulePasteIntoTargetApplication } from "./auto-paste";
 import { debugLog, textSummary } from "./debug-log";
-import { getFrontmostAppBundleId } from "./frontmost-app";
 import type { IpcSenderValidator } from "./renderer-trust";
 import type { RendererSurface } from "./window-paths";
 
@@ -26,6 +26,7 @@ let clipboardPollTimer: NodeJS.Timeout | null = null;
 let lastObservedSignature = "";
 let capturePaused = false;
 let ignoredAppBundleIds: string[] = [];
+let ignoredWindowsAppIdentifiers: string[] = [];
 
 type ClipboardHistoryIpcOptions = {
   isTrustedSender: IpcSenderValidator;
@@ -43,9 +44,10 @@ export function closeClipboardHistory(): void {
   clipboardHistory.close?.();
 }
 
-export function configureClipboardPrivacy(options: { capturePaused: boolean; ignoredAppBundleIds: string[] }): void {
+export function configureClipboardPrivacy(options: { capturePaused: boolean; ignoredAppBundleIds: string[]; ignoredWindowsAppIdentifiers?: string[] }): void {
   capturePaused = options.capturePaused;
   ignoredAppBundleIds = options.ignoredAppBundleIds;
+  ignoredWindowsAppIdentifiers = options.ignoredWindowsAppIdentifiers ?? [];
 }
 
 export function sendToLiveWindow(window: BrowserWindow, channel: string, ...args: unknown[]): boolean {
@@ -217,11 +219,11 @@ export function captureCurrentClipboardItem(options: { force?: boolean } = {}): 
     return clipboardHistory.list();
   }
 
-  const frontmostBundleId = getFrontmostAppBundleId();
+  const activeApp = getActiveAppIdentity();
 
-  if (shouldIgnoreFrontmostApp(frontmostBundleId, { ignoredAppBundleIds })) {
+  if (shouldIgnoreActiveApp(activeApp, { ignoredAppBundleIds, ignoredWindowsAppIdentifiers })) {
     debugLog("capture", "skip clipboard capture from ignored app", {
-      bundleId: frontmostBundleId ?? "",
+      activeApp: activeApp ?? "",
       historyCount: clipboardHistory.list().length
     });
     return clipboardHistory.list();

@@ -180,6 +180,10 @@ function installClipboardApi(clips = createClips()) {
           Array.isArray(patch.ignoredAppBundleIds)
             ? patch.ignoredAppBundleIds.filter((item): item is string => typeof item === "string")
             : currentSettings.ignoredAppBundleIds,
+        ignoredWindowsAppIdentifiers:
+          Array.isArray(patch.ignoredWindowsAppIdentifiers)
+            ? patch.ignoredWindowsAppIdentifiers.filter((item): item is string => typeof item === "string")
+            : currentSettings.ignoredWindowsAppIdentifiers,
         popupSize: {
           width:
             typeof patch.popupSize?.width === "number"
@@ -264,7 +268,8 @@ describe("CopClip app shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Privacy/ }));
     expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
-    expect(screen.getByText("Ignore Applications")).toBeInTheDocument();
+    expect(screen.getByText("Ignore macOS Applications")).toBeInTheDocument();
+    expect(screen.getByText("Ignore Windows Applications")).toBeInTheDocument();
     expect(screen.getByLabelText("Pause clipboard capture")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
@@ -419,17 +424,29 @@ describe("CopClip app shell", () => {
       target: { value: "com.example.PasswordManager" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Add ignored app" }));
+    fireEvent.change(screen.getByLabelText("Ignored Windows app executable"), {
+      target: { value: "PasswordManager.exe" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add ignored Windows app" }));
 
     await waitFor(() => {
       expect(api.updateSettings).toHaveBeenCalledWith({ capturePaused: true });
       expect(api.updateSettings).toHaveBeenCalledWith({ ignoredAppBundleIds: ["com.example.PasswordManager"] });
+      expect(api.updateSettings).toHaveBeenCalledWith({ ignoredWindowsAppIdentifiers: ["PasswordManager.exe"] });
       expect(screen.getByText("com.example.PasswordManager")).toBeInTheDocument();
+      expect(screen.getByText("PasswordManager.exe")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Remove ignored app com.example.PasswordManager" }));
 
     await waitFor(() => {
       expect(api.updateSettings).toHaveBeenCalledWith({ ignoredAppBundleIds: [] });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove ignored Windows app PasswordManager.exe" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({ ignoredWindowsAppIdentifiers: [] });
     });
   });
 

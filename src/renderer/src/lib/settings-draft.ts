@@ -9,6 +9,7 @@ export type SettingsDraft = {
   checkForUpdatesAutomatically: boolean;
   historyLimit: string;
   ignoredAppBundleIds: string[];
+  ignoredWindowsAppIdentifiers: string[];
   launchAtLogin: boolean;
   openClipboardHistoryShortcut: string;
   pasteAutomatically: boolean;
@@ -27,6 +28,7 @@ export function createSettingsDraft(settings: CopClipSettings): SettingsDraft {
     checkForUpdatesAutomatically: settings.checkForUpdatesAutomatically,
     historyLimit: String(settings.historyLimit),
     ignoredAppBundleIds: settings.ignoredAppBundleIds,
+    ignoredWindowsAppIdentifiers: settings.ignoredWindowsAppIdentifiers,
     launchAtLogin: settings.launchAtLogin,
     openClipboardHistoryShortcut: settings.openClipboardHistoryShortcut,
     pasteAutomatically: settings.pasteAutomatically,
