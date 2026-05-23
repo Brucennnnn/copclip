@@ -591,6 +591,38 @@ describe("CopClip app shell", () => {
     });
   });
 
+  it("scrolls the selected popup item into view when keyboard selection moves", async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    installClipboardApi(createManyClips());
+
+    try {
+      render(<App />);
+
+      await screen.findByRole("button", {
+        name: /Restore clipboard item 1: Recent clip 1/
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      scrollIntoView.mockClear();
+
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+
+      const secondItem = screen.getByRole("button", {
+        name: /Restore clipboard item 2: Recent clip 2/
+      });
+      await waitFor(() => {
+        expect(secondItem).toHaveAttribute("aria-selected", "true");
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+        expect(scrollIntoView.mock.contexts).toContain(secondItem);
+      });
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
   it("restores the selected popup item with the paste-with-formatting shortcut", async () => {
     const api = installClipboardApi();
 

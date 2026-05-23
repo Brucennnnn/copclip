@@ -14,6 +14,7 @@ import { cx, drag, noDrag } from "../../lib/styles";
 export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
   const appInfo = window.copclip?.getAppInfo();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const clipButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [clips, setClips] = useState<ClipboardItem[]>([]);
   const [query, setQuery] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(Boolean(window.copclip));
@@ -86,6 +87,14 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
       return Math.min(Math.max(currentIndex, 0), clips.length - 1);
     });
   }, [clips.length]);
+
+  useEffect(() => {
+    const selectedButton = clipButtonRefs.current[selectedIndex];
+
+    if (typeof selectedButton?.scrollIntoView === "function") {
+      selectedButton.scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedIndex, clips.length]);
 
   const restoreClip = useCallback(async (clip: ClipboardItem | undefined) => {
     if (!clip || !window.copclip) {
@@ -173,8 +182,8 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
 
   return (
     <main className="min-h-screen p-0" aria-label="CopClip clipboard popup">
-      <section className="h-screen overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_60px_color-mix(in_oklch,var(--fg)_12%,transparent)]" aria-label="Clipboard popup">
-        <div className="border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--surface)_92%,var(--bg))] px-[18px] pb-3.5 pt-[18px]">
+      <section className="box-border flex h-screen flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_60px_color-mix(in_oklch,var(--fg)_12%,transparent)]" aria-label="Clipboard popup">
+        <div className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--surface)_92%,var(--bg))] px-[18px] pb-3.5 pt-[18px]">
           <div className={cx("mb-3.5 flex items-center justify-between gap-4", drag)}>
             <h1 className="text-[22px] font-bold leading-tight text-[var(--fg)]">Clipboard history</h1>
             <div className="flex items-center gap-2.5">
@@ -204,7 +213,7 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
           </label>
         </div>
 
-        <div className={cx("grid h-[calc(100vh-119px)] content-start overflow-y-auto", noDrag)} aria-label="Clipboard history results">
+        <div className={cx("grid min-h-0 flex-1 content-start overflow-y-auto", noDrag)} aria-label="Clipboard history results">
           {clips.map((clip, index) => (
             <div
               className={cx("group relative border-b border-[var(--border)]", clip.pinned && "pinned")}
@@ -218,6 +227,9 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
                   "grid min-h-[86px] w-full grid-cols-[34px_minmax(0,1fr)_auto] items-start gap-3 bg-transparent py-[15px] pl-[18px] pr-28 text-left text-[var(--fg)] outline-none hover:bg-[color-mix(in_oklch,var(--accent-soft)_74%,var(--surface))] focus-visible:bg-[color-mix(in_oklch,var(--accent-soft)_74%,var(--surface))]",
                   index === selectedIndex && "bg-[color-mix(in_oklch,var(--accent-soft)_74%,var(--surface))] shadow-[inset_3px_0_0_var(--accent)]"
                 )}
+                ref={(element) => {
+                  clipButtonRefs.current[index] = element;
+                }}
                 type="button"
                 onClick={() => void restoreClip(clip)}
               >
