@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
+import { highlightSearchMatches, nextScrollTopForRow, rowTopWithinScrollPane, scrollPaneToTop } from "../src/renderer/src/features/popup/ClipboardPopup";
 import { exposedApiKeys } from "../src/preload/api";
 import { defaultCopClipSettings, type CopClipSettings, type CopClipSettingsPatch } from "../src/shared/app-settings";
 import { clipboardItemSearchText, type ClipboardItem } from "../src/shared/clipboard-history";
@@ -236,6 +237,104 @@ function installClipboardApi(clips = createClips()) {
   return api;
 }
 
+describe("popup row scroll math", () => {
+  it("does not scroll when the selected row is fully visible", () => {
+    expect(nextScrollTopForRow({
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 100,
+      scrollHeight: 500,
+      viewportHeight: 140,
+      visibleTop: 80
+    })).toBe(80);
+  });
+
+  it("scrolls down enough to show the full selected row", () => {
+    expect(nextScrollTopForRow({
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 190,
+      scrollHeight: 500,
+      viewportHeight: 120,
+      visibleTop: 78
+    })).toBe(173);
+  });
+
+  it("scrolls up enough to show the full selected row", () => {
+    expect(nextScrollTopForRow({
+      direction: "nearest",
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 285,
+      scrollHeight: 500,
+      viewportHeight: 120,
+      visibleTop: 355
+    })).toBe(277);
+  });
+
+  it("aligns the row toward the top when keyboard navigation moves upward", () => {
+    expect(nextScrollTopForRow({
+      direction: "up",
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 285,
+      scrollHeight: 500,
+      viewportHeight: 120,
+      visibleTop: 270
+    })).toBe(277);
+  });
+
+  it("clamps scrolling at the list edges", () => {
+    expect(nextScrollTopForRow({
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 0,
+      scrollHeight: 475,
+      viewportHeight: 120,
+      visibleTop: 50
+    })).toBe(0);
+    expect(nextScrollTopForRow({
+      padding: 8,
+      rowHeight: 95,
+      rowTop: 380,
+      scrollHeight: 475,
+      viewportHeight: 120,
+      visibleTop: 268
+    })).toBe(355);
+  });
+
+  it("measures row position relative to the scroll pane instead of the page", () => {
+    expect(rowTopWithinScrollPane({
+      rowViewportTop: 412,
+      scrollPaneViewportTop: 127,
+      visibleTop: 80
+    })).toBe(365);
+  });
+
+  it("uses smooth scroll when moving the results pane programmatically", () => {
+    const pane = {
+      scrollTop: 0,
+      scrollTo: vi.fn(({ top }: ScrollToOptions) => {
+        pane.scrollTop = Number(top);
+      })
+    };
+
+    scrollPaneToTop(pane, 78, "smooth");
+
+    expect(pane.scrollTo).toHaveBeenCalledWith({ top: 78, behavior: "smooth" });
+    expect(pane.scrollTop).toBe(78);
+  });
+});
+
+describe("popup search highlighting", () => {
+  it("wraps matching search text without changing surrounding text", () => {
+    const { container } = render(<>{highlightSearchMatches("GitHub issue link", "git")}</>);
+
+    expect(container).toHaveTextContent("GitHub issue link");
+    expect(container.querySelector("mark")).toHaveTextContent("Git");
+  });
+});
+
 describe("CopClip app shell", () => {
   it("shows the desktop shell for normal app usage", async () => {
     const api = installClipboardApi();
@@ -321,7 +420,7 @@ describe("CopClip app shell", () => {
   it("shows the compact clipboard popup without the full window shell", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Clipboard history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByLabelText("Clipboard popup")).toBeInTheDocument();
     expect(screen.getByLabelText("Search clipboard history")).toBeEnabled();
     expect(screen.queryByLabelText("Close clipboard popup")).not.toBeInTheDocument();
@@ -338,9 +437,9 @@ describe("CopClip app shell", () => {
       expect(screen.getByRole("button", {
         name: /Restore clipboard item 1: https:\/\/example.com\/docs/
       })).toBeInTheDocument();
-      expect(screen.getByText("URL")).toBeInTheDocument();
+      expect(screen.getByText("Link")).toBeInTheDocument();
       expect(screen.getByText("HTML")).toBeInTheDocument();
-      expect(screen.getByText("IMG")).toBeInTheDocument();
+      expect(screen.getByText("Image")).toBeInTheDocument();
       expect(screen.getAllByText("Formatted release note").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Image 1x1").length).toBeGreaterThan(0);
     });
@@ -491,7 +590,7 @@ describe("CopClip app shell", () => {
   it("filters visible text clipboard history as the user types", async () => {
     installClipboardApi();
 
-    render(<App />);
+    const { container } = render(<App />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Release checklist").length).toBeGreaterThan(0);
@@ -505,7 +604,10 @@ describe("CopClip app shell", () => {
     await waitFor(() => {
       expect(window.copclip?.listClipboardHistory).toHaveBeenLastCalledWith("git");
       expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
-      expect(screen.getAllByText("GitHub issue link").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: GitHub issue link/
+      })).toHaveAttribute("aria-selected", "true");
+      expect(container.querySelector("mark")).toHaveTextContent("Git");
     });
   });
 
@@ -558,13 +660,40 @@ describe("CopClip app shell", () => {
       expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear history" }));
 
     await waitFor(() => {
       expect(api.clearClipboardHistory).toHaveBeenCalledOnce();
       expect(screen.getByText("Copy text, links, or images to start history")).toBeInTheDocument();
     });
     expect(api.restoreClipboardItem).not.toHaveBeenCalled();
+  });
+
+  it("clamps popup selection after deleting the selected item", async () => {
+    const api = installClipboardApi();
+
+    render(<App />);
+
+    const githubItem = await screen.findByRole("button", {
+      name: /Restore clipboard item 2: GitHub issue link/
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    await waitFor(() => {
+      expect(githubItem).toHaveAttribute("aria-selected", "true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete clipboard item: GitHub issue link/ }));
+
+    await waitFor(() => {
+      expect(api.deleteClipboardItem).toHaveBeenCalledWith("clip-2");
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: Release checklist/
+      })).toHaveAttribute("aria-selected", "true");
+    });
   });
 
   it("moves selection with arrows and restores the selected item with Enter", async () => {
@@ -608,19 +737,193 @@ describe("CopClip app shell", () => {
       });
       scrollIntoView.mockClear();
 
+      const resultsPane = screen.getByLabelText("Clipboard history results");
+      const clipButtons = [1, 2, 3, 4, 5].map((index) => screen.getByRole("button", {
+        name: new RegExp(`Restore clipboard item ${index}: Recent clip ${index}`)
+      }));
+      let scrollTop = 0;
+
+      Object.defineProperty(resultsPane, "clientHeight", { configurable: true, value: 120 });
+      Object.defineProperty(resultsPane, "scrollHeight", { configurable: true, value: 475 });
+      Object.defineProperty(resultsPane, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = value;
+        }
+      });
+      resultsPane.scrollTo = vi.fn((optionsOrX?: ScrollToOptions | number) => {
+        scrollTop = typeof optionsOrX === "number" ? optionsOrX : Number(optionsOrX?.top);
+      }) as HTMLDivElement["scrollTo"];
+      resultsPane.getBoundingClientRect = vi.fn(() => ({
+        bottom: 220,
+        height: 120,
+        left: 0,
+        right: 360,
+        top: 100,
+        width: 360,
+        x: 0,
+        y: 100,
+        toJSON: () => ({})
+      }));
+      clipButtons.forEach((button, index) => {
+        const row = button.parentElement!;
+
+        Object.defineProperty(row, "offsetHeight", { configurable: true, value: 95 });
+        row.getBoundingClientRect = vi.fn(() => ({
+          bottom: 100 + (index * 95) + 95 - scrollTop,
+          height: 95,
+          left: 0,
+          right: 360,
+          top: 100 + (index * 95) - scrollTop,
+          width: 360,
+          x: 0,
+          y: 100 + (index * 95) - scrollTop,
+          toJSON: () => ({})
+        }));
+      });
+
       fireEvent.keyDown(window, { key: "ArrowDown" });
 
-      const secondItem = screen.getByRole("button", {
-        name: /Restore clipboard item 2: Recent clip 2/
-      });
       await waitFor(() => {
-        expect(secondItem).toHaveAttribute("aria-selected", "true");
-        expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
-        expect(scrollIntoView.mock.contexts).toContain(secondItem);
+        expect(clipButtons[1]).toHaveAttribute("aria-selected", "true");
+        expect(scrollTop).toBe(78);
+        expect(resultsPane.scrollTo).toHaveBeenLastCalledWith({ top: 78, behavior: "smooth" });
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      });
+
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+
+      await waitFor(() => {
+        expect(clipButtons[4]).toHaveAttribute("aria-selected", "true");
+        expect(scrollTop).toBe(355);
+        expect(resultsPane.scrollTo).toHaveBeenLastCalledWith({ top: 355, behavior: "smooth" });
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      });
+
+      fireEvent.keyDown(window, { key: "ArrowUp" });
+
+      await waitFor(() => {
+        expect(clipButtons[3]).toHaveAttribute("aria-selected", "true");
+        expect(scrollTop).toBe(277);
+        expect(resultsPane.scrollTo).toHaveBeenLastCalledWith({ top: 277, behavior: "smooth" });
+        expect(scrollIntoView).not.toHaveBeenCalled();
       });
     } finally {
       Element.prototype.scrollIntoView = originalScrollIntoView;
     }
+  });
+
+  it("does not scroll the popup results when pointer movement changes selection", async () => {
+    installClipboardApi(createManyClips());
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Recent clip 1/
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const resultsPane = screen.getByLabelText("Clipboard history results");
+    const thirdItem = screen.getByRole("button", {
+      name: /Restore clipboard item 3: Recent clip 3/
+    });
+    let scrollTop = 0;
+
+    Object.defineProperty(resultsPane, "clientHeight", { configurable: true, value: 120 });
+    Object.defineProperty(resultsPane, "scrollHeight", { configurable: true, value: 475 });
+    Object.defineProperty(resultsPane, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = value;
+      }
+    });
+    Object.defineProperty(thirdItem.parentElement, "offsetHeight", { configurable: true, value: 95 });
+    Object.defineProperty(thirdItem.parentElement, "offsetTop", { configurable: true, value: 190 });
+
+    fireEvent.pointerMove(thirdItem.parentElement!, { clientX: 24, clientY: 180 });
+
+    await waitFor(() => {
+      expect(thirdItem).toHaveAttribute("aria-selected", "true");
+      expect(scrollTop).toBe(0);
+    });
+  });
+
+  it("does not let stationary pointer hover override keyboard arrow up selection", async () => {
+    installClipboardApi(createManyClips());
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Recent clip 1/
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const resultsPane = screen.getByLabelText("Clipboard history results");
+    const clipButtons = [1, 2, 3, 4, 5].map((index) => screen.getByRole("button", {
+      name: new RegExp(`Restore clipboard item ${index}: Recent clip ${index}`)
+    }));
+    let scrollTop = 0;
+
+    Object.defineProperty(resultsPane, "clientHeight", { configurable: true, value: 120 });
+    Object.defineProperty(resultsPane, "scrollHeight", { configurable: true, value: 475 });
+    Object.defineProperty(resultsPane, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = value;
+      }
+    });
+    resultsPane.scrollTo = vi.fn((optionsOrX?: ScrollToOptions | number) => {
+      scrollTop = typeof optionsOrX === "number" ? optionsOrX : Number(optionsOrX?.top);
+    }) as HTMLDivElement["scrollTo"];
+    resultsPane.getBoundingClientRect = vi.fn(() => ({
+      bottom: 220,
+      height: 120,
+      left: 0,
+      right: 360,
+      top: 100,
+      width: 360,
+      x: 0,
+      y: 100,
+      toJSON: () => ({})
+    }));
+    clipButtons.forEach((button, index) => {
+      const row = button.parentElement!;
+
+      Object.defineProperty(row, "offsetHeight", { configurable: true, value: 95 });
+      row.getBoundingClientRect = vi.fn(() => ({
+        bottom: 100 + (index * 95) + 95 - scrollTop,
+        height: 95,
+        left: 0,
+        right: 360,
+        top: 100 + (index * 95) - scrollTop,
+        width: 360,
+        x: 0,
+        y: 100 + (index * 95) - scrollTop,
+        toJSON: () => ({})
+      }));
+    });
+
+    fireEvent.pointerMove(clipButtons[4].parentElement!, { clientX: 20, clientY: 100 });
+    await waitFor(() => {
+      expect(clipButtons[4]).toHaveAttribute("aria-selected", "true");
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.mouseEnter(clipButtons[4].parentElement!);
+
+    await waitFor(() => {
+      expect(clipButtons[3]).toHaveAttribute("aria-selected", "true");
+      expect(clipButtons[4]).toHaveAttribute("aria-selected", "false");
+    });
   });
 
   it("restores the selected popup item with the paste-with-formatting shortcut", async () => {
@@ -746,7 +1049,9 @@ describe("CopClip app shell", () => {
 
     await waitFor(() => {
       expect(screen.queryAllByText("Release checklist")).toHaveLength(0);
-      expect(screen.getAllByText("GitHub issue link").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", {
+        name: /Restore clipboard item 1: GitHub issue link/
+      })).toBeInTheDocument();
     });
 
     api.replaceClips([

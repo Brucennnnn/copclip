@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CopClip Popup Only</title>
+  <style>
+    :root {
+      --bg: oklch(18% 0.018 250);
+      --surface: oklch(21% 0.012 250);
+      --fg: oklch(96% 0.004 250);
+      --muted: oklch(72% 0.012 250);
+      --border: oklch(32% 0.01 250);
+      --accent: oklch(62% 0.19 258);
+      --accent-2: oklch(74% 0.13 252);
+      --success: oklch(70% 0.16 145);
+      --warn: oklch(75% 0.15 82);
+      --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+      --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--fg);
+      font-family: var(--font-body);
+      background: transparent;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    button, input { font: inherit; }
+    button {
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .popup-stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .popover-wrap {
+      position: relative;
+      width: min(774px, calc(100vw - 32px));
+    }
+
+    .popover {
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(21, 26, 32, 0.96), rgba(17, 22, 27, 0.95)),
+        rgba(17, 21, 27, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow:
+        0 28px 80px rgba(0, 0, 0, 0.44),
+        inset 0 1px rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(28px) saturate(120%);
+      -webkit-backdrop-filter: blur(28px) saturate(120%);
+      overflow: hidden;
+    }
+
+    .pop-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      padding: 18px 17px 10px 19px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      font-weight: 760;
+    }
+
+    .version {
+      margin-top: 7px;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 13px;
+    }
+
+    .local-chip {
+      align-self: start;
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 48px;
+      align-items: center;
+      padding: 10px 17px 16px 19px;
+    }
+
+    .search {
+      height: 40px;
+      display: grid;
+      grid-template-columns: 26px 1fr auto;
+      align-items: center;
+      gap: 4px;
+      padding: 0 11px;
+      border-radius: 10px;
+      background: rgba(3, 6, 10, 0.34);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .search svg { width: 18px; height: 18px; color: rgba(255, 255, 255, 0.58); }
+    .search input {
+      min-width: 0;
+      height: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--fg);
+      font-size: 15px;
+    }
+
+    .search input::placeholder { color: rgba(255, 255, 255, 0.45); }
+
+    .kbd {
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.48);
+      background: rgba(255, 255, 255, 0.05);
+      font: 12px/1.25 var(--font-mono);
+    }
+
+    .clear {
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 13px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.065);
+      border: 1px solid rgba(255, 255, 255, 0.085);
+      font-size: 14px;
+      font-weight: 640;
+      white-space: nowrap;
+      transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .clear:hover { background: rgba(255, 255, 255, 0.11); transform: translateY(-1px); }
+    .clear svg, .mini svg, .foot-action svg { width: 16px; height: 16px; }
+
+    .clip-list {
+      margin: 0 17px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .clip-row {
+      min-height: 95px;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) 58px auto;
+      align-items: start;
+      gap: 14px;
+      padding: 15px 15px 15px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+      transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .clip-row:last-child { border-bottom: 0; }
+    .clip-row:hover { background: rgba(255, 255, 255, 0.036); }
+    .clip-row.hidden { display: none; }
+
+    .typebox {
+      width: 52px;
+      height: 58px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.038);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--accent-2);
+      font-size: 11px;
+    }
+
+    .typebox svg { width: 23px; height: 23px; }
+    .typebox span { color: rgba(255, 255, 255, 0.7); font-size: 10px; }
+    .typebox.note { color: rgba(255, 255, 255, 0.74); }
+    .typebox.image { color: var(--warn); }
+    .typebox.link { color: oklch(70% 0.16 220); }
+
+    .clip-main { min-width: 0; }
+    .clip-title {
+      margin: 0 0 8px;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 690;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .clip-body {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.62);
+      font-size: 14px;
+      line-height: 1.45;
+      max-width: 460px;
+    }
+
+    .clip-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 13px;
+      margin-top: 8px;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 14px;
+    }
+
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .check::before {
+      content: "✓";
+      width: 17px;
+      height: 17px;
+      border-radius: 4px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--success);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .time {
+      padding-top: 28px;
+      color: rgba(255, 255, 255, 0.54);
+      font-size: 13px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .mini {
+      height: 31px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.042);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.84);
+      font-size: 13px;
+      font-weight: 620;
+      transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .mini:hover { background: rgba(255, 255, 255, 0.095); color: #fff; }
+    .mini.active { color: #fff; border-color: color-mix(in oklch, var(--accent), white 18%); background: color-mix(in oklch, var(--accent), transparent 78%); }
+
+    .thumb {
+      width: 102px;
+      height: 70px;
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 64% 35%, rgba(255, 255, 255, 0.88), transparent 7px),
+        linear-gradient(140deg, #38475c, #80a9c2 45%, #122b38 46%, #20445a 66%, #6b5039 67%, #152737);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.18);
+    }
+
+    .image-meta {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .footer {
+      height: 64px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 0 21px;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 14px;
+    }
+
+    .foot-actions {
+      display: flex;
+      gap: 22px;
+      align-items: center;
+    }
+
+    .foot-action {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.62);
+      transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .foot-action:hover { color: #fff; transform: translateY(-1px); }
+
+    .empty {
+      display: none;
+      padding: 44px 18px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.58);
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      margin: 0 17px;
+    }
+
+    .empty.active { display: block; }
+
+    .toast {
+      position: absolute;
+      right: 28px;
+      bottom: 78px;
+      transform: translateY(10px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 10px 13px;
+      border-radius: 10px;
+      background: rgba(10, 14, 20, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 760px) {
+      .popup-stage { padding: 22px 12px; align-items: start; }
+      .toolbar {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .clear { justify-content: center; }
+      .clip-row {
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 11px;
+      }
+      .row-actions, .time { grid-column: 2; padding-top: 0; justify-self: start; }
+      .clip-body { max-width: none; }
+      .image-meta { grid-template-columns: 1fr; }
+      .thumb { width: 132px; }
+    }
+  </style>
+</head>
+<body style="background-color: rgb(255, 255, 255);">
+  <main class="popup-stage" aria-label="CopClip popup only prototype">
+    <section class="popover-wrap" aria-label="Clipboard history popup">
+      <div class="popover">
+        <div class="pop-header">
+          <div>
+            <h1 class="title">History</h1>
+            <div class="version">CopClip 0.1.0</div>
+          </div>
+          <div class="local-chip">Local</div>
+        </div>
+
+        <div class="toolbar">
+          <label class="search">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m20 20-4.6-4.6m2.1-5.15a7.25 7.25 0 1 1-14.5 0 7.25 7.25 0 0 1 14.5 0Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+            </svg>
+            <input id="searchInput" type="search" placeholder="Search history..." autocomplete="off">
+            <span class="kbd">⌘K</span>
+          </label>
+          <button class="clear" id="clearHistory" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 7a7.07 7.07 0 0 1 10 10m-1.4 1.1A7.07 7.07 0 0 1 5.9 8.4M5 5l14 14m-9.2-7.2h4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            Clear history
+          </button>
+        </div>
+
+        <div class="clip-list" id="clipList">
+          <article class="clip-row" data-text="html create polished promotional visual copclip lightweight macos clipboard manager">
+            <div class="typebox">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m8 8-4 4 4 4m8-8 4 4-4 4m-2.5-10-3 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <span>HTML</span>
+            </div>
+            <div class="clip-main">
+              <h2 class="clip-title">Create a polished promotional visual for CopClip, a lightweig...</h2>
+              <p class="clip-body">Create a polished promotional visual for CopClip, a lightweight macOS clipboard manager app. Show a modern Mac desktop environment with...</p>
+            </div>
+            <div class="time"></div>
+            <div class="row-actions">
+              <button class="mini pin" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                Pin
+              </button>
+              <button class="mini delete" type="button">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                Delete
+              </button>
+            </div>
+          </article>
+
+          <article class="clip-row" data-text="link https www copclip app 2m">
+            <div class="typebox link">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9.4 14.6 14.6 9.4M10.8 6.2l1.3-1.3a4.1 4.1 0 0 1 5.8 5.8l-1.3 1.3M13.2 17.8l-1.3 1.3a4.1 4.1 0 0 1-5.8-5.8l1.3-1.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+              </svg>
+              <span>Link</span>
+            </div>
+            <div class="clip-main">
+              <h2 class="clip-title">https://www.copclip.app</h2>
+              <p class="clip-body">2m</p>
+            </div>
+            <div class="time">2m</div>
+            <div class="row-actions">
+              <button class="mini pin" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                Pin
+              </button>
+              <button class="mini delete" type="button">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                Delete
+              </button>
+            </div>
+          </article>
+
+          <article class="clip-row" data-text="html thai คัดแนวไอ โซลูชั่น จำกัด">
+            <div class="typebox">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m8 8-4 4 4 4m8-8 4 4-4 4m-2.5-10-3 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <span>HTML</span>
+            </div>
+            <div class="clip-main">
+              <h2 class="clip-title">คัดแนวไอ โซลูชั่น จำกัด</h2>
+              <p class="clip-body">คัดแนวไอ โซลูชั่น จำกัด</p>
+            </div>
+            <div class="time">5m</div>
+            <div class="row-actions">
+              <button class="mini pin" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                Pin
+              </button>
+              <button class="mini delete" type="button">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                Delete
+              </button>
+            </div>
+          </article>
+
+          <article class="clip-row" data-text="note launch plan define core product build mvp test users ship iterate">
+            <div class="typebox note">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 7h14M5 12h10M5 17h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+              </svg>
+              <span>Note</span>
+            </div>
+            <div class="clip-main">
+              <h2 class="clip-title">Launch Plan</h2>
+              <div class="clip-checks">
+                <span class="check">Define core product</span>
+                <span class="check">Build MVP</span>
+                <span class="check">Test with users</span>
+                <span class="check">Ship &amp; iterate</span>
+              </div>
+            </div>
+            <div class="time">12m</div>
+            <div class="row-actions">
+              <button class="mini pin" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                Pin
+              </button>
+              <button class="mini delete" type="button">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                Delete
+              </button>
+            </div>
+          </article>
+
+          <article class="clip-row" data-text="image copclip hero png 1280 720 png image">
+            <div class="typebox image">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 19V5h14v14H5Zm3-4 3-3 2 2 2.5-3 3.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M8.5 9.5h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+              </svg>
+              <span>Image</span>
+            </div>
+            <div class="clip-main image-meta">
+              <div class="thumb" aria-hidden="true"></div>
+              <div>
+                <h2 class="clip-title">copclip-hero.png</h2>
+                <p class="clip-body">1,280 × 720<br>PNG Image</p>
+              </div>
+            </div>
+            <div class="time">28m</div>
+            <div class="row-actions">
+              <button class="mini pin" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                Pin
+              </button>
+              <button class="mini delete" type="button">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                Delete
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <div class="empty" id="emptyState">No clips match this search.</div>
+
+        <footer class="footer">
+          <span id="itemCount">5 items</span>
+          <div class="foot-actions">
+            <button class="foot-action" type="button" aria-label="Show pinned clips" data-toast="Pinned clips">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 4 6 6-4 1-4.5 4.5.5 4.5-2.7-2.7L5 22l4.2-4.3L6.5 15l4.5.5L15.5 11 14 4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+            </button>
+            <button class="foot-action" type="button" aria-label="Trash" data-toast="Deleted clips">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6V5h6v1m-9 2h12m-10 0 .8 11h6.4L16 8M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+            </button>
+            <button class="foot-action" type="button" aria-label="Settings" data-toast="Settings">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.2A3.2 3.2 0 1 0 12 8.8a3.2 3.2 0 0 0 0 6.4Zm7.3-2.2v-2l-2.1-.5a6.5 6.5 0 0 0-.7-1.7l1.1-1.8-1.4-1.4-1.8 1.1c-.5-.3-1.1-.5-1.7-.7L12.2 4h-2l-.5 2.1c-.6.2-1.2.4-1.7.7L6.2 5.7 4.8 7.1 5.9 9c-.3.5-.5 1.1-.7 1.7L3.1 11v2l2.1.5c.2.6.4 1.2.7 1.7L4.8 17l1.4 1.4 1.8-1.1c.5.3 1.1.5 1.7.7l.5 2.1h2l.5-2.1c.6-.2 1.2-.4 1.7-.7l1.8 1.1 1.4-1.4-1.1-1.8c.3-.5.5-1.1.7-1.7l2.1-.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+            </button>
+          </div>
+        </footer>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const searchInput = document.getElementById('searchInput');
+      const clipList = document.getElementById('clipList');
+      const rows = Array.from(document.querySelectorAll('.clip-row'));
+      const empty = document.getElementById('emptyState');
+      const itemCount = document.getElementById('itemCount');
+      const clearHistory = document.getElementById('clearHistory');
+      const toast = document.getElementById('toast');
+      let toastTimer = 0;
+
+      function showToast(message) {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add('show');
+        toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1400);
+      }
+
+      function visibleRows() {
+        return rows.filter((row) => !row.classList.contains('hidden') && row.isConnected);
+      }
+
+      function updateCount() {
+        const count = visibleRows().length;
+        itemCount.textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+        empty.classList.toggle('active', count === 0);
+        clipList.style.display = count === 0 ? 'none' : 'block';
+      }
+
+      function filterRows() {
+        const query = searchInput.value.trim().toLowerCase();
+        rows.forEach((row) => {
+          const match = row.dataset.text.includes(query);
+          row.classList.toggle('hidden', !match);
+        });
+        updateCount();
+      }
+
+      searchInput.addEventListener('input', filterRows);
+      document.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+          event.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }
+      });
+
+      document.querySelectorAll('.pin').forEach((button) => {
+        button.addEventListener('click', () => {
+          const active = button.classList.toggle('active');
+          button.setAttribute('aria-pressed', String(active));
+          showToast(active ? 'Clip pinned' : 'Clip unpinned');
+        });
+      });
+
+      document.querySelectorAll('.delete').forEach((button) => {
+        button.addEventListener('click', () => {
+          const row = button.closest('.clip-row');
+          row.style.opacity = '0';
+          window.setTimeout(() => {
+            row.remove();
+            updateCount();
+            showToast('Clip deleted');
+          }, 150);
+        });
+      });
+
+      clearHistory.addEventListener('click', () => {
+        rows.forEach((row) => {
+          if (row.isConnected) row.remove();
+        });
+        updateCount();
+        showToast('History cleared');
+      });
+
+      document.querySelectorAll('[data-toast]').forEach((button) => {
+        button.addEventListener('click', () => showToast(button.dataset.toast));
+      });
+
+      updateCount();
+    })();
+  </script>
+
+
+</body></html>
