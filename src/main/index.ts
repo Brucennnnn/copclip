@@ -18,7 +18,7 @@ import { debugLog } from "./debug-log";
 import { capturePasteTargetApplication, configureAutoPaste } from "./auto-paste";
 import { enableWaylandGlobalShortcuts } from "./global-shortcuts";
 import { buildMenuBarTemplate } from "./menu-bar";
-import { ensureLiveWindow } from "./popup-window-state";
+import { configurePopupForCurrentMacSpace, ensureLiveWindow, raisePopupAboveCurrentSpace } from "./popup-window-state";
 import { createFileSettingsStore, type SettingsStore } from "./settings-store";
 import { createSqliteClipboardHistory } from "./sqlite-clipboard-history";
 import { defaultCopClipSettings, hasSettingsValidationErrors, validateSettings, type CopClipSettings } from "../shared/app-settings";
@@ -51,6 +51,8 @@ let menuBarTray: Tray | null = null;
 let capturePaused = false;
 let dockHidden = false;
 let registeredHotkey = "";
+let registeredNextPinboardHotkey = "";
+let registeredPreviousPinboardHotkey = "";
 let settingsStore: SettingsStore | null = null;
 let appSettings: CopClipSettings = defaultCopClipSettings;
 let suppressDesktopShellUntil = 0;
@@ -143,7 +145,8 @@ function openClipboardPopup(): void {
   });
   popupWindow.setBounds({ ...position, ...appSettings.popupSize });
   lastPopupPosition = position;
-  popupWindow.setAlwaysOnTop(true, "floating");
+  configurePopupForCurrentMacSpace(popupWindow);
+  raisePopupAboveCurrentSpace(popupWindow);
   popupWindow.show();
   popupWindow.focus();
   const sent = sendToLiveWindow(popupWindow, ipcChannels.clipboardPopupOpened, items);
@@ -151,6 +154,12 @@ function openClipboardPopup(): void {
 }
 
 function registerGlobalHotkey(accelerator = appSettings.openClipboardHistoryShortcut): boolean {
+  if (!accelerator) {
+    registeredHotkey = "";
+    debugLog("hotkey", "global shortcut disabled");
+    return true;
+  }
+
   const registered = globalShortcut.register(accelerator, openClipboardPopup);
   debugLog("hotkey", "register global shortcut", {
     accelerator,
@@ -169,6 +178,16 @@ function registerGlobalHotkey(accelerator = appSettings.openClipboardHistoryShor
 
 function replaceGlobalHotkey(accelerator: string): boolean {
   if (accelerator === registeredHotkey) {
+    return true;
+  }
+
+  if (!accelerator) {
+    if (registeredHotkey) {
+      globalShortcut.unregister(registeredHotkey);
+    }
+
+    registeredHotkey = "";
+    debugLog("hotkey", "global shortcut disabled");
     return true;
   }
 
@@ -191,10 +210,99 @@ function replaceGlobalHotkey(accelerator: string): boolean {
   return true;
 }
 
+function replacePinboardHotkey(
+  currentAccelerator: string,
+  nextAccelerator: string,
+  label: string,
+  callback: () => void
+): string | null {
+  if (nextAccelerator === currentAccelerator) {
+    return currentAccelerator;
+  }
+
+  if (!nextAccelerator) {
+    if (currentAccelerator) {
+      globalShortcut.unregister(currentAccelerator);
+    }
+
+    debugLog("hotkey", "pinboard shortcut disabled", { label });
+    return "";
+  }
+
+  const registered = globalShortcut.register(nextAccelerator, callback);
+  debugLog("hotkey", "replace pinboard shortcut", {
+    accelerator: nextAccelerator,
+    label,
+    registered,
+    isRegistered: globalShortcut.isRegistered(nextAccelerator)
+  });
+
+  if (!registered) {
+    return null;
+  }
+
+  if (currentAccelerator) {
+    globalShortcut.unregister(currentAccelerator);
+  }
+
+  return nextAccelerator;
+}
+
+function showNextPinboard(): void {
+  activateAdjacentPinboard(1);
+}
+
+function showPreviousPinboard(): void {
+  activateAdjacentPinboard(-1);
+}
+
+function registerPinboardHotkeys(): void {
+  registeredNextPinboardHotkey = replacePinboardHotkey(
+    registeredNextPinboardHotkey,
+    appSettings.showNextPinboardShortcut,
+    "next pinboard",
+    showNextPinboard
+  ) ?? "";
+  registeredPreviousPinboardHotkey = replacePinboardHotkey(
+    registeredPreviousPinboardHotkey,
+    appSettings.showPreviousPinboardShortcut,
+    "previous pinboard",
+    showPreviousPinboard
+  ) ?? "";
+}
+
+function activateAdjacentPinboard(offset: 1 | -1): void {
+  if (appSettings.pinboards.length < 2) {
+    return;
+  }
+
+  const currentIndex = Math.max(0, appSettings.pinboards.findIndex((pinboard) => pinboard.id === appSettings.activePinboardId));
+  const nextIndex = (currentIndex + offset + appSettings.pinboards.length) % appSettings.pinboards.length;
+  updateActivePinboardSetting(appSettings.pinboards[nextIndex].id);
+}
+
 function sendSettingsChanged(): void {
   BrowserWindow.getAllWindows().forEach((window) => {
     sendToLiveWindow(window, ipcChannels.settingsChanged, appSettings);
   });
+}
+
+function updateActivePinboardSetting(activePinboardId: string): void {
+  if (settingsStore) {
+    const result = settingsStore.update({ activePinboardId });
+
+    if (!hasSettingsValidationErrors(result)) {
+      appSettings = result.settings;
+    }
+  } else {
+    appSettings = {
+      ...appSettings,
+      activePinboardId
+    };
+  }
+
+  debugLog("settings", "active pinboard changed", { activePinboardId: appSettings.activePinboardId });
+  sendSettingsChanged();
 }
 
 function setCapturePaused(paused: boolean): void {
@@ -272,6 +380,48 @@ function registerSettingsIpc(): void {
           openClipboardHistoryShortcut: "This shortcut could not be registered."
         }
       };
+    }
+
+    if (validation.settings.showNextPinboardShortcut !== appSettings.showNextPinboardShortcut) {
+      const nextHotkey = replacePinboardHotkey(
+        registeredNextPinboardHotkey,
+        validation.settings.showNextPinboardShortcut,
+        "next pinboard",
+        showNextPinboard
+      );
+
+      if (nextHotkey === null) {
+        return {
+          ok: false,
+          settings: appSettings,
+          errors: {
+            showNextPinboardShortcut: "This shortcut could not be registered."
+          }
+        };
+      }
+
+      registeredNextPinboardHotkey = nextHotkey;
+    }
+
+    if (validation.settings.showPreviousPinboardShortcut !== appSettings.showPreviousPinboardShortcut) {
+      const previousHotkey = replacePinboardHotkey(
+        registeredPreviousPinboardHotkey,
+        validation.settings.showPreviousPinboardShortcut,
+        "previous pinboard",
+        showPreviousPinboard
+      );
+
+      if (previousHotkey === null) {
+        return {
+          ok: false,
+          settings: appSettings,
+          errors: {
+            showPreviousPinboardShortcut: "This shortcut could not be registered."
+          }
+        };
+      }
+
+      registeredPreviousPinboardHotkey = previousHotkey;
     }
 
     const previousSettings = appSettings;
@@ -505,6 +655,8 @@ function createClipboardPopupWindow(): BrowserWindow {
     }
   });
 
+  configurePopupForCurrentMacSpace(window);
+
   window.on("hide", () => {
     debugLog("window", "popup hidden");
     suppressDesktopShellActivation();
@@ -569,6 +721,7 @@ if (hasSingleInstanceLock) {
     popupWindow = createClipboardPopupWindow();
     createMenuBarController();
     registerGlobalHotkey();
+    registerPinboardHotkeys();
     if (!appSettings.capturePaused) {
       startClipboardCapture();
     }

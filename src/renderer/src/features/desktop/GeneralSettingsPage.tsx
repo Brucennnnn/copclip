@@ -4,7 +4,7 @@ import { SettingsCard } from "../../components/SettingsCard";
 import { SettingsRow } from "../../components/SettingsRow";
 import { ToggleSwitch } from "../../components/ToggleSwitch";
 import type { SettingsDraft, SettingsErrors } from "../../lib/settings-draft";
-import { cx, fieldClass, settingsMuted } from "../../lib/styles";
+import { cx, fieldClass, settingsBorder, settingsMuted, settingsText } from "../../lib/styles";
 
 export function GeneralSettingsPage({
   draftSettings,
@@ -37,10 +37,6 @@ export function GeneralSettingsPage({
         <SettingsRow note="Keep CopClip available from the menu bar." title="Run in background">
           <ToggleSwitch checked label="Run in background" disabled />
         </SettingsRow>
-        <SettingsRow note="Planned for a future cloud-sync milestone." title="iCloud sync">
-          <span className={cx("text-xs font-semibold", settingsMuted)}>Not available</span>
-          <ToggleSwitch checked={false} label="iCloud sync" disabled />
-        </SettingsRow>
         <SettingsRow note="Uses the existing automatic update preference until updater UI is added." title="Check for updates">
           <ToggleSwitch
             checked={draftSettings.checkForUpdatesAutomatically}
@@ -53,13 +49,13 @@ export function GeneralSettingsPage({
         </SettingsRow>
       </SettingsCard>
 
-      <h2 className="mx-3.5 -mb-2 mt-[18px] text-base font-bold tracking-[-0.02em] text-[#e8e8e8]">Paste Items</h2>
+      <h2 className={cx("mx-3.5 -mb-2 mt-[18px] text-base font-bold tracking-[-0.02em]", settingsText)}>Paste Items</h2>
       <SettingsCard>
-        <label className="grid min-h-[52px] grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#343838] px-3.5 py-3 last:border-b-0">
+        <label className={cx("grid min-h-[52px] grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-3 border-b px-3.5 py-3 last:border-b-0", settingsBorder)}>
           <input
             aria-label="To active app"
             checked={pasteToActiveApp}
-            className="h-[18px] w-[18px] accent-[#087cff]"
+            className="h-[18px] w-[18px] accent-[var(--settings-focus)]"
             name="paste-destination"
             type="radio"
             onChange={() => {
@@ -68,16 +64,16 @@ export function GeneralSettingsPage({
             }}
           />
           <span>
-            <strong className="block text-[15px] font-semibold text-[#e8e8e8]">To active app</strong>
+            <strong className={cx("block text-[15px] font-semibold", settingsText)}>To active app</strong>
             <small className={cx("mt-1 block text-xs leading-snug", settingsMuted)}>Paste selected items directly to the application you are currently using.</small>
           </span>
           <span className="h-[58px] w-[86px] rounded-[10px] bg-gradient-to-br from-orange-300 via-orange-500 to-orange-700 shadow-[inset_0_-40px_0_rgb(95_38_0_/_22%)] max-[560px]:hidden" aria-hidden="true" />
         </label>
-        <label className="grid min-h-[52px] grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#343838] px-3.5 py-3 last:border-b-0">
+        <label className={cx("grid min-h-[52px] grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-3 border-b px-3.5 py-3 last:border-b-0", settingsBorder)}>
           <input
             aria-label="To clipboard"
             checked={!pasteToActiveApp}
-            className="h-[18px] w-[18px] accent-[#087cff]"
+            className="h-[18px] w-[18px] accent-[var(--settings-focus)]"
             name="paste-destination"
             type="radio"
             onChange={() => {
@@ -86,7 +82,7 @@ export function GeneralSettingsPage({
             }}
           />
           <span>
-            <strong className="block text-[15px] font-semibold text-[#e8e8e8]">To clipboard</strong>
+            <strong className={cx("block text-[15px] font-semibold", settingsText)}>To clipboard</strong>
             <small className={cx("mt-1 block text-xs leading-snug", settingsMuted)}>Copy selected items to the system clipboard to paste manually later.</small>
           </span>
         </label>
@@ -95,10 +91,10 @@ export function GeneralSettingsPage({
         </SettingsRow>
       </SettingsCard>
 
-      <h2 className="mx-3.5 -mb-2 mt-[18px] text-base font-bold tracking-[-0.02em] text-[#e8e8e8]">Existing Settings</h2>
+      <h2 className={cx("mx-3.5 -mb-2 mt-[18px] text-base font-bold tracking-[-0.02em]", settingsText)}>Existing Settings</h2>
       <SettingsCard className="grid-cols-2 gap-2.5 p-3 max-[560px]:grid-cols-1">
         <label className="grid min-w-0 gap-1">
-          <span className="text-xs font-semibold text-[#e8e8e8]">Keep history limit</span>
+          <span className={cx("text-xs font-semibold", settingsText)}>Keep history limit</span>
           <input
             aria-invalid={Boolean(settingsErrors.historyLimit)}
             className={fieldClass}
@@ -112,7 +108,7 @@ export function GeneralSettingsPage({
           {settingsErrors.historyLimit ? <em className="text-[11px] not-italic leading-snug text-red-500">{settingsErrors.historyLimit}</em> : null}
         </label>
         <label className="grid min-w-0 gap-1">
-          <span className="text-xs font-semibold text-[#e8e8e8]">Popup location</span>
+          <span className={cx("text-xs font-semibold", settingsText)}>Popup location</span>
           <select
             aria-label="Popup location"
             className={fieldClass}
@@ -133,7 +129,7 @@ export function GeneralSettingsPage({
         </label>
         <div className="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1" aria-label="Popup size">
           <label className="grid min-w-0 gap-1">
-            <span className="text-xs font-semibold text-[#e8e8e8]">Popup width</span>
+            <span className={cx("text-xs font-semibold", settingsText)}>Popup width</span>
             <input
               aria-invalid={Boolean(settingsErrors["popupSize.width"])}
               className={fieldClass}
@@ -147,7 +143,7 @@ export function GeneralSettingsPage({
             {settingsErrors["popupSize.width"] ? <em className="text-[11px] not-italic leading-snug text-red-500">{settingsErrors["popupSize.width"]}</em> : null}
           </label>
           <label className="grid min-w-0 gap-1">
-            <span className="text-xs font-semibold text-[#e8e8e8]">Popup height</span>
+            <span className={cx("text-xs font-semibold", settingsText)}>Popup height</span>
             <input
               aria-invalid={Boolean(settingsErrors["popupSize.height"])}
               className={fieldClass}
@@ -162,7 +158,7 @@ export function GeneralSettingsPage({
           </label>
         </div>
         <label className="grid min-w-0 gap-1">
-          <span className="text-xs font-semibold text-[#e8e8e8]">Theme</span>
+          <span className={cx("text-xs font-semibold", settingsText)}>Theme</span>
           <select
             className={fieldClass}
             value={draftSettings.theme}

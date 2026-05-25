@@ -3,7 +3,18 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 type ShortcutKeyboardEvent = Pick<KeyboardEvent | ReactKeyboardEvent<HTMLInputElement>, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">;
 
 export function acceleratorFromKeyboardEvent(event: ShortcutKeyboardEvent): string | null {
-  const key = event.key === " " ? "Space" : event.key === "Enter" ? "Return" : event.key.length === 1 ? event.key.toUpperCase() : event.key;
+  const key =
+    event.key === " "
+      ? "Space"
+      : event.key === "Enter"
+        ? "Return"
+        : event.key === "ArrowLeft"
+          ? "Left"
+          : event.key === "ArrowRight"
+            ? "Right"
+            : event.key.length === 1
+              ? event.key.toUpperCase()
+              : event.key;
 
   if (["Alt", "Control", "Meta", "Shift"].includes(key)) {
     return null;
@@ -16,6 +27,10 @@ export function acceleratorFromKeyboardEvent(event: ShortcutKeyboardEvent): stri
 }
 
 export function formatAccelerator(accelerator: string): string {
+  if (!accelerator) {
+    return "Disabled";
+  }
+
   return accelerator
     .replaceAll("CommandOrControl", "⌘")
     .replaceAll("Command", "⌘")
@@ -24,5 +39,7 @@ export function formatAccelerator(accelerator: string): string {
     .replaceAll("Option", "⌥")
     .replaceAll("Shift", "⇧")
     .replaceAll("Return", "↩")
+    .replaceAll("Left", "←")
+    .replaceAll("Right", "→")
     .replaceAll("+", "");
 }

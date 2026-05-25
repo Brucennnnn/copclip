@@ -6,7 +6,13 @@ export type PopupSize = {
   height: number;
 };
 
+export type CopClipPinboard = {
+  id: string;
+  name: string;
+};
+
 export type CopClipSettings = {
+  activePinboardId: string;
   checkForUpdatesAutomatically: boolean;
   capturePaused: boolean;
   historyLimit: number;
@@ -16,12 +22,16 @@ export type CopClipSettings = {
   openClipboardHistoryShortcut: string;
   pasteAutomatically: boolean;
   pasteWithFormattingShortcut: string;
+  pinboards: CopClipPinboard[];
   popupPosition: PopupPositionMode;
   popupSize: PopupSize;
+  showNextPinboardShortcut: string;
+  showPreviousPinboardShortcut: string;
   theme: CopClipTheme;
 };
 
 export type CopClipSettingsPatch = Partial<{
+  activePinboardId: unknown;
   checkForUpdatesAutomatically: unknown;
   capturePaused: unknown;
   globalHotkey: unknown;
@@ -32,8 +42,11 @@ export type CopClipSettingsPatch = Partial<{
   openClipboardHistoryShortcut: unknown;
   pasteAutomatically: unknown;
   pasteWithFormattingShortcut: unknown;
+  pinboards: unknown;
   popupPosition: unknown;
   popupSize: Partial<Record<keyof PopupSize, unknown>>;
+  showNextPinboardShortcut: unknown;
+  showPreviousPinboardShortcut: unknown;
   theme: unknown;
 }>;
 
@@ -42,7 +55,13 @@ export type SettingsValidationResult = {
   errors: Partial<Record<keyof CopClipSettings | "popupSize.width" | "popupSize.height", string>>;
 };
 
+export const defaultPinboard: CopClipPinboard = {
+  id: "default",
+  name: "Default"
+};
+
 export const defaultCopClipSettings: CopClipSettings = {
+  activePinboardId: defaultPinboard.id,
   checkForUpdatesAutomatically: true,
   capturePaused: false,
   historyLimit: 100,
@@ -52,11 +71,14 @@ export const defaultCopClipSettings: CopClipSettings = {
   openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
   pasteAutomatically: true,
   pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+  pinboards: [defaultPinboard],
   popupPosition: "cursor",
   popupSize: {
     width: 400,
     height: 500
   },
+  showNextPinboardShortcut: "CommandOrControl+Right",
+  showPreviousPinboardShortcut: "CommandOrControl+Left",
   theme: "system"
 };
 
@@ -66,8 +88,11 @@ const minPopupWidth = 320;
 const maxPopupWidth = 900;
 const minPopupHeight = 360;
 const maxPopupHeight = 900;
+const maxPinboards = 24;
+const maxPinboardNameLength = 40;
 const validThemes: CopClipTheme[] = ["system", "light", "dark"];
 const validPopupPositions: PopupPositionMode[] = ["cursor", "bottom", "top", "center", "last-position"];
+const pinboardIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
 const bundleIdPattern = /^[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$/;
 const windowsAppIdentifierPattern = /^[^\0-\u001f<>|?*"]+$/;
 
@@ -82,6 +107,10 @@ function isValidHotkey(value: string): boolean {
   );
 
   return parts.length >= 2 && hasModifier && /^[A-Za-z0-9+]+$/.test(value);
+}
+
+function isValidOptionalHotkey(value: string): boolean {
+  return value === "" || isValidHotkey(value);
 }
 
 function readInteger(value: unknown): number | undefined {
@@ -160,12 +189,40 @@ function normalizeIgnoredWindowsAppIdentifiers(value: unknown): string[] | undef
   return identifiers;
 }
 
+function normalizePinboards(value: unknown): CopClipPinboard[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxPinboards) {
+    return undefined;
+  }
+
+  const seenIds = new Set<string>();
+  const pinboards: CopClipPinboard[] = [];
+
+  for (const item of value) {
+    if (!isPlainObject(item) || typeof item.id !== "string" || typeof item.name !== "string") {
+      return undefined;
+    }
+
+    const id = item.id.trim();
+    const name = item.name.trim();
+
+    if (!pinboardIdPattern.test(id) || !name || name.length > maxPinboardNameLength || seenIds.has(id)) {
+      return undefined;
+    }
+
+    seenIds.add(id);
+    pinboards.push({ id, name });
+  }
+
+  return pinboards;
+}
+
 export function validateSettings(
   patch: CopClipSettingsPatch,
   currentSettings: CopClipSettings = defaultCopClipSettings
 ): SettingsValidationResult {
   const settings: CopClipSettings = {
     ...currentSettings,
+    pinboards: currentSettings.pinboards.map((pinboard) => ({ ...pinboard })),
     popupSize: {
       ...currentSettings.popupSize
     }
@@ -201,7 +258,7 @@ export function validateSettings(
   if ("openClipboardHistoryShortcut" in patch) {
     const shortcut = typeof patch.openClipboardHistoryShortcut === "string" ? patch.openClipboardHistoryShortcut.trim() : "";
 
-    if (!isValidHotkey(shortcut)) {
+    if (!isValidOptionalHotkey(shortcut)) {
       errors.openClipboardHistoryShortcut = "Use a shortcut like CommandOrControl+Shift+V.";
     } else {
       settings.openClipboardHistoryShortcut = shortcut;
@@ -227,11 +284,55 @@ export function validateSettings(
   if ("pasteWithFormattingShortcut" in patch) {
     const shortcut = typeof patch.pasteWithFormattingShortcut === "string" ? patch.pasteWithFormattingShortcut.trim() : "";
 
-    if (!isValidHotkey(shortcut)) {
+    if (!isValidOptionalHotkey(shortcut)) {
       errors.pasteWithFormattingShortcut = "Use a shortcut like CommandOrControl+Shift+Return.";
     } else {
       settings.pasteWithFormattingShortcut = shortcut;
     }
+  }
+
+  if ("showNextPinboardShortcut" in patch) {
+    const shortcut = typeof patch.showNextPinboardShortcut === "string" ? patch.showNextPinboardShortcut.trim() : "";
+
+    if (!isValidOptionalHotkey(shortcut)) {
+      errors.showNextPinboardShortcut = "Use a shortcut like CommandOrControl+Right.";
+    } else {
+      settings.showNextPinboardShortcut = shortcut;
+    }
+  }
+
+  if ("showPreviousPinboardShortcut" in patch) {
+    const shortcut = typeof patch.showPreviousPinboardShortcut === "string" ? patch.showPreviousPinboardShortcut.trim() : "";
+
+    if (!isValidOptionalHotkey(shortcut)) {
+      errors.showPreviousPinboardShortcut = "Use a shortcut like CommandOrControl+Left.";
+    } else {
+      settings.showPreviousPinboardShortcut = shortcut;
+    }
+  }
+
+  if ("pinboards" in patch) {
+    const pinboards = normalizePinboards(patch.pinboards);
+
+    if (!pinboards) {
+      errors.pinboards = `Use 1 to ${maxPinboards} pinboards with names up to ${maxPinboardNameLength} characters.`;
+    } else {
+      settings.pinboards = pinboards;
+    }
+  }
+
+  if ("activePinboardId" in patch) {
+    const activePinboardId = typeof patch.activePinboardId === "string" ? patch.activePinboardId.trim() : "";
+
+    if (!settings.pinboards.some((pinboard) => pinboard.id === activePinboardId)) {
+      errors.activePinboardId = "Choose an existing pinboard.";
+    } else {
+      settings.activePinboardId = activePinboardId;
+    }
+  }
+
+  if (!settings.pinboards.some((pinboard) => pinboard.id === settings.activePinboardId)) {
+    settings.activePinboardId = settings.pinboards[0]?.id ?? defaultPinboard.id;
   }
 
   if ("popupPosition" in patch) {

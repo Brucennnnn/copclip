@@ -8,7 +8,7 @@ import { PinBadge } from "../../components/PinBadge";
 import { SettingsCard } from "../../components/SettingsCard";
 import { clipTitle, formatClipAge } from "../../lib/clipboard-ui";
 import { performHistoryAction, type HistoryAction } from "../../lib/history-actions";
-import { cx, settingsBorder, settingsMuted } from "../../lib/styles";
+import { cx, settingsBorder, settingsControl, settingsMuted, settingsText } from "../../lib/styles";
 
 export function HistorySettingsPage() {
   const [historyItems, setHistoryItems] = useState<ClipboardItem[]>([]);
@@ -51,7 +51,7 @@ export function HistorySettingsPage() {
       <div className="flex items-center justify-between gap-3.5">
         <p className={cx("mt-1 max-w-[680px] text-xs leading-snug max-[560px]:text-sm", settingsMuted)}>Pin reusable clips, delete individual entries, or clear local history when needed.</p>
         <button
-          className="inline-flex min-h-[30px] shrink-0 items-center gap-1.5 rounded-lg border border-[#343838] bg-[#303333] px-2.5 text-xs font-semibold text-[#e8e8e8] disabled:cursor-not-allowed disabled:opacity-50"
+          className={cx("inline-flex min-h-[30px] shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50", settingsControl)}
           disabled={historyItems.length === 0}
           type="button"
           onClick={() => void applyHistoryAction("clear")}
@@ -67,13 +67,13 @@ export function HistorySettingsPage() {
             <ClipKindIcon item={item} />
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <strong className="truncate text-sm font-semibold text-[#e8e8e8]">{clipTitle(item)}</strong>
+                <strong className={cx("truncate text-sm font-semibold", settingsText)}>{clipTitle(item)}</strong>
                 <PinBadge pinned={item.pinned} />
               </div>
               <ClipPreview item={item} />
               <span className={cx("mt-2 block font-mono text-[11px]", settingsMuted)}>{formatClipAge(item.capturedAt)}</span>
             </div>
-            <div className="[--border:#4a4f4f] [--fg:#e8e8e8] [--surface:#303333]">
+            <div className="[--border:var(--settings-field-border)] [--fg:var(--settings-fg)] [--surface:var(--settings-field-bg)]">
               <ClipActionButtons
                 item={item}
                 onDelete={() => void applyHistoryAction("delete", item)}

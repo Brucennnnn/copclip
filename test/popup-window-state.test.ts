@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ensureLiveWindow } from "../src/main/popup-window-state";
+import { configurePopupForCurrentMacSpace, ensureLiveWindow, raisePopupAboveCurrentSpace } from "../src/main/popup-window-state";
 
 describe("popup window state", () => {
   it("reuses a live popup window", () => {
@@ -25,5 +25,28 @@ describe("popup window state", () => {
 
     expect(ensureLiveWindow(destroyedWindow, createWindow)).toBe(nextWindow);
     expect(createWindow).toHaveBeenCalledOnce();
+  });
+
+  it("configures the popup for the active macOS full-screen Space", () => {
+    const setVisibleOnAllWorkspaces = vi.fn();
+
+    configurePopupForCurrentMacSpace({
+      setAlwaysOnTop: vi.fn(),
+      setVisibleOnAllWorkspaces
+    });
+
+    expect(setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
+      visibleOnFullScreen: true
+    });
+  });
+
+  it("raises the popup above full-screen app windows when opening", () => {
+    const setAlwaysOnTop = vi.fn();
+
+    raisePopupAboveCurrentSpace({
+      setAlwaysOnTop
+    });
+
+    expect(setAlwaysOnTop).toHaveBeenCalledWith(true, "pop-up-menu");
   });
 });

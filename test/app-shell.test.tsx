@@ -165,6 +165,8 @@ function installClipboardApi(clips = createClips()) {
 
       currentSettings = {
         ...currentSettings,
+        activePinboardId:
+          typeof patch.activePinboardId === "string" ? patch.activePinboardId : currentSettings.activePinboardId,
         capturePaused:
           typeof patch.capturePaused === "boolean" ? patch.capturePaused : currentSettings.capturePaused,
         checkForUpdatesAutomatically:
@@ -211,6 +213,17 @@ function installClipboardApi(clips = createClips()) {
           typeof patch.pasteWithFormattingShortcut === "string"
             ? patch.pasteWithFormattingShortcut
             : currentSettings.pasteWithFormattingShortcut,
+        pinboards:
+          Array.isArray(patch.pinboards)
+            ? patch.pinboards.filter((item): item is { id: string; name: string } =>
+                Boolean(item) &&
+                typeof item === "object" &&
+                "id" in item &&
+                "name" in item &&
+                typeof item.id === "string" &&
+                typeof item.name === "string"
+              )
+            : currentSettings.pinboards,
         popupPosition:
           patch.popupPosition === "cursor" ||
           patch.popupPosition === "bottom" ||
@@ -222,7 +235,15 @@ function installClipboardApi(clips = createClips()) {
         theme:
           patch.theme === "system" || patch.theme === "light" || patch.theme === "dark"
             ? patch.theme
-            : currentSettings.theme
+            : currentSettings.theme,
+        showNextPinboardShortcut:
+          typeof patch.showNextPinboardShortcut === "string"
+            ? patch.showNextPinboardShortcut
+            : currentSettings.showNextPinboardShortcut,
+        showPreviousPinboardShortcut:
+          typeof patch.showPreviousPinboardShortcut === "string"
+            ? patch.showPreviousPinboardShortcut
+            : currentSettings.showPreviousPinboardShortcut
       };
       settingsChangedCallback?.(currentSettings);
       return {
@@ -370,6 +391,10 @@ describe("CopClip app shell", () => {
     expect(screen.getByText("Ignore macOS Applications")).toBeInTheDocument();
     expect(screen.getByText("Ignore Windows Applications")).toBeInTheDocument();
     expect(screen.getByLabelText("Pause clipboard capture")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Show during screen sharing")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Generate link previews")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ignore confidential content")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ignore transient content")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
     expect(screen.getByRole("heading", { name: "Shortcuts" })).toBeInTheDocument();
@@ -388,6 +413,33 @@ describe("CopClip app shell", () => {
 
     expect(screen.getByRole("heading", { name: "Privacy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Privacy/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps the desktop settings shell visible when persisted settings are missing newer fields", async () => {
+    const api = installClipboardApi();
+    api.getSettings.mockResolvedValueOnce({
+      capturePaused: false,
+      historyLimit: 100,
+      ignoredAppBundleIds: [],
+      ignoredWindowsAppIdentifiers: [],
+      launchAtLogin: false,
+      openClipboardHistoryShortcut: "CommandOrControl+Shift+V",
+      pasteAutomatically: true,
+      pasteWithFormattingShortcut: "CommandOrControl+Shift+Return",
+      popupPosition: "top",
+      popupSize: {
+        width: 650,
+        height: 600
+      },
+      theme: "dark"
+    } as unknown as CopClipSettings);
+    window.history.pushState({}, "", "/?surface=desktop#shortcuts");
+
+    render(<App />);
+
+    expect(screen.getByLabelText("CopClip desktop shell")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Show next Pinboard")).toHaveValue("⌘→");
+    expect(screen.getByRole("button", { name: "Activate pinboard Default" })).toBeInTheDocument();
   });
 
   it("shows desktop history controls for local clipboard management", async () => {
@@ -473,6 +525,8 @@ describe("CopClip app shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Shortcuts/ }));
     const hotkeyInput = await screen.findByLabelText("Activate Paste");
+    fireEvent.focus(hotkeyInput);
+    expect(hotkeyInput).toHaveValue("Press shortcut...");
     fireEvent.keyDown(hotkeyInput, { altKey: true, ctrlKey: true, key: "v" });
 
     await waitFor(() => {
@@ -483,6 +537,84 @@ describe("CopClip app shell", () => {
     });
   });
 
+  it("disables desktop shortcuts when the clear button is pressed", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop#shortcuts");
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disable Activate Paste shortcut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable Activate Paste Stack shortcut" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({ openClipboardHistoryShortcut: "" });
+      expect(api.updateSettings).toHaveBeenCalledWith({ pasteWithFormattingShortcut: "" });
+      expect(screen.getAllByDisplayValue("Disabled")).toHaveLength(2);
+    });
+  });
+
+  it("resets desktop shortcuts to defaults", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop#shortcuts");
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disable Activate Paste shortcut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable Activate Paste Stack shortcut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset shortcuts to default..." }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        openClipboardHistoryShortcut: defaultCopClipSettings.openClipboardHistoryShortcut,
+        pasteWithFormattingShortcut: defaultCopClipSettings.pasteWithFormattingShortcut,
+        showNextPinboardShortcut: defaultCopClipSettings.showNextPinboardShortcut,
+        showPreviousPinboardShortcut: defaultCopClipSettings.showPreviousPinboardShortcut
+      });
+      expect(screen.getByText("Saved")).toBeInTheDocument();
+    });
+  });
+
+  it("edits pinboard shortcuts and manages pinboards", async () => {
+    const api = installClipboardApi();
+    window.history.pushState({}, "", "/?surface=desktop#shortcuts");
+
+    render(<App />);
+
+    const nextPinboardInput = await screen.findByLabelText("Show next Pinboard");
+    fireEvent.focus(nextPinboardInput);
+    fireEvent.keyDown(nextPinboardInput, { key: "ArrowRight", metaKey: true, shiftKey: true });
+
+    fireEvent.change(screen.getByLabelText("Pinboard name"), {
+      target: { value: "Work" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add pinboard" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        showNextPinboardShortcut: "CommandOrControl+Shift+Right"
+      });
+      expect(screen.getByRole("button", { name: "Activate pinboard Work" })).toBeInTheDocument();
+    });
+
+    const addCall = api.updateSettings.mock.calls.find(([patch]) => Array.isArray(patch.pinboards) && patch.pinboards.length === 2);
+    expect(addCall?.[0]).toEqual({
+      activePinboardId: expect.stringMatching(/^work-/),
+      pinboards: [
+        { id: "default", name: "Default" },
+        { id: expect.stringMatching(/^work-/), name: "Work" }
+      ]
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove pinboard Work" }));
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        activePinboardId: "default",
+        pinboards: [{ id: "default", name: "Default" }]
+      });
+    });
+  });
+
   it("updates Maccy-style behavior settings", async () => {
     const api = installClipboardApi();
     window.history.pushState({}, "", "/?surface=desktop");
@@ -490,6 +622,7 @@ describe("CopClip app shell", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: /General/ }));
+    expect(screen.queryByLabelText("iCloud sync")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByLabelText("Open at login"));
     fireEvent.click(screen.getByLabelText("To clipboard"));
     fireEvent.change(screen.getByLabelText("Popup location"), {

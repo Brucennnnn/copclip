@@ -8,6 +8,29 @@
   --border: oklch(91% 0.006 250);
   --accent: oklch(58% 0.18 255);
   --accent-soft: oklch(96% 0.035 255);
+  --settings-bg: oklch(97.5% 0.006 240);
+  --settings-sidebar: linear-gradient(90deg, oklch(96% 0.008 240), oklch(98.5% 0.004 240));
+  --settings-sidebar-border: oklch(88% 0.01 240);
+  --settings-shell-border: oklch(86% 0.012 240);
+  --settings-card: oklch(100% 0 0);
+  --settings-field-bg: oklch(96% 0.006 240);
+  --settings-field-border: oklch(84% 0.012 240);
+  --settings-field-fg: oklch(20% 0.016 245);
+  --settings-shortcut-bg: oklch(93% 0.01 240);
+  --settings-fg: oklch(20% 0.016 245);
+  --settings-muted: oklch(48% 0.014 245);
+  --settings-border: oklch(88% 0.01 240);
+  --settings-focus: oklch(58% 0.18 255);
+  --settings-focus-bg: oklch(94% 0.035 255);
+  --settings-focus-fg: oklch(20% 0.016 245);
+  --settings-focus-ring: oklch(58% 0.18 255 / 22%);
+  --settings-disabled-control-bg: oklch(91% 0.008 240);
+  --settings-disabled-control-fg: oklch(31% 0.014 245);
+  --settings-control-hover: oklch(88% 0.012 240);
+  --settings-nav-hover: oklch(92% 0.01 240);
+  --settings-nav-active-from: oklch(61% 0.19 255);
+  --settings-nav-active-to: oklch(51% 0.19 255);
+  --settings-scrollbar: oklch(72% 0.012 240);
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -22,6 +45,29 @@
     --border: oklch(36% 0.014 250);
     --accent: oklch(68% 0.16 255);
     --accent-soft: oklch(33% 0.04 255);
+    --settings-bg: oklch(20% 0.012 250);
+    --settings-sidebar: linear-gradient(90deg, oklch(18% 0.012 250), oklch(21% 0.012 250));
+    --settings-sidebar-border: oklch(28% 0.014 250);
+    --settings-shell-border: oklch(34% 0.014 250);
+    --settings-card: oklch(25% 0.014 250);
+    --settings-field-bg: oklch(29% 0.014 250);
+    --settings-field-border: oklch(39% 0.014 250);
+    --settings-field-fg: oklch(94% 0.006 250);
+    --settings-shortcut-bg: oklch(44% 0.014 250);
+    --settings-fg: oklch(94% 0.006 250);
+    --settings-muted: oklch(72% 0.012 250);
+    --settings-border: oklch(36% 0.014 250);
+    --settings-focus: oklch(72% 0.15 255);
+    --settings-focus-bg: oklch(32% 0.06 255);
+    --settings-focus-fg: oklch(98% 0.004 250);
+    --settings-focus-ring: oklch(72% 0.15 255 / 22%);
+    --settings-disabled-control-bg: oklch(34% 0.012 250);
+    --settings-disabled-control-fg: oklch(94% 0.006 250);
+    --settings-control-hover: oklch(39% 0.014 250);
+    --settings-nav-hover: oklch(25% 0.014 250);
+    --settings-nav-active-from: oklch(57% 0.19 255);
+    --settings-nav-active-to: oklch(48% 0.19 255);
+    --settings-scrollbar: oklch(48% 0.014 250);
   }
 }
 
@@ -33,6 +79,29 @@
   --border: oklch(36% 0.014 250);
   --accent: oklch(68% 0.16 255);
   --accent-soft: oklch(33% 0.04 255);
+  --settings-bg: oklch(20% 0.012 250);
+  --settings-sidebar: linear-gradient(90deg, oklch(18% 0.012 250), oklch(21% 0.012 250));
+  --settings-sidebar-border: oklch(28% 0.014 250);
+  --settings-shell-border: oklch(34% 0.014 250);
+  --settings-card: oklch(25% 0.014 250);
+  --settings-field-bg: oklch(29% 0.014 250);
+  --settings-field-border: oklch(39% 0.014 250);
+  --settings-field-fg: oklch(94% 0.006 250);
+  --settings-shortcut-bg: oklch(44% 0.014 250);
+  --settings-fg: oklch(94% 0.006 250);
+  --settings-muted: oklch(72% 0.012 250);
+  --settings-border: oklch(36% 0.014 250);
+  --settings-focus: oklch(72% 0.15 255);
+  --settings-focus-bg: oklch(32% 0.06 255);
+  --settings-focus-fg: oklch(98% 0.004 250);
+  --settings-focus-ring: oklch(72% 0.15 255 / 22%);
+  --settings-disabled-control-bg: oklch(34% 0.012 250);
+  --settings-disabled-control-fg: oklch(94% 0.006 250);
+  --settings-control-hover: oklch(39% 0.014 250);
+  --settings-nav-hover: oklch(25% 0.014 250);
+  --settings-nav-active-from: oklch(57% 0.19 255);
+  --settings-nav-active-to: oklch(48% 0.19 255);
+  --settings-scrollbar: oklch(48% 0.014 250);
 }
 
 html,
