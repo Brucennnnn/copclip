@@ -93,12 +93,12 @@ function sortClips(items: ClipboardItem[]): ClipboardItem[] {
   });
 }
 
-function installClipboardApi(clips = createClips()) {
+function installClipboardApi(clips = createClips(), settings: CopClipSettings = defaultCopClipSettings) {
   let popupOpenedCallback: ((items: ClipboardItem[]) => void) | undefined;
   let historyChangedCallback: ((items: ClipboardItem[]) => void) | undefined;
   let settingsChangedCallback: ((settings: CopClipSettings) => void) | undefined;
   let currentClips = clips;
-  let currentSettings = defaultCopClipSettings;
+  let currentSettings = settings;
   const api = {
     clearClipboardHistory: vi.fn(async () => {
       currentClips = [];
@@ -496,6 +496,37 @@ describe("CopClip app shell", () => {
       expect(screen.getAllByText("Image 1x1").length).toBeGreaterThan(0);
     });
     expect(document.querySelector(".clip-image-preview img")).toHaveAttribute("src", pngDataUrl);
+  });
+
+  it("uses theme-aware popup and shortcut text colors in light theme", async () => {
+    installClipboardApi(createClips(), {
+      ...defaultCopClipSettings,
+      theme: "light"
+    });
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: /Restore clipboard item 1: Release checklist/
+    });
+
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(screen.getByLabelText("CopClip clipboard popup")).toHaveClass("text-[var(--popup-fg)]");
+    expect(screen.getByLabelText("Clipboard popup")).toHaveClass("[background:var(--popup-bg)]");
+    expect(screen.getByRole("heading", { name: "History" })).toHaveClass("text-[var(--popup-fg)]");
+    expect(screen.getByLabelText("Search clipboard history")).toHaveClass("text-[var(--popup-fg)]");
+    expect(screen.getByRole("button", { name: "Clear history" })).toHaveClass("text-[var(--popup-fg)]");
+    expect(screen.getAllByText("Release checklist").some((element) => element.classList.contains("text-[var(--popup-fg)]"))).toBe(true);
+
+    cleanup();
+    installClipboardApi(createClips(), {
+      ...defaultCopClipSettings,
+      theme: "light"
+    });
+    window.history.pushState({}, "", "/?surface=desktop#shortcuts");
+    render(<App />);
+
+    expect(await screen.findByText("Activate Paste Stack")).toHaveClass("text-[var(--settings-fg)]");
   });
 
   it("documents the intentionally exposed preload API surface", () => {

@@ -18,7 +18,7 @@ function typeboxClass(item: ClipboardItem): string {
   }
 
   if (item.type === "text") {
-    return "text-white/75";
+    return "text-[var(--popup-muted)]";
   }
 
   return "text-[oklch(74%_0.13_252)]";
@@ -59,7 +59,7 @@ export function highlightSearchMatches(text: string, query: string): ReactNode {
 
     const matchEnd = matchIndex + normalizedQuery.length;
     parts.push(
-      <mark className="rounded-[4px] bg-[oklch(78%_0.14_82/0.24)] px-0.5 text-[oklch(91%_0.13_88)]" key={`${matchIndex}-${matchEnd}`}>
+      <mark className="rounded-[4px] bg-[var(--popup-mark-bg)] px-0.5 text-[var(--popup-mark-fg)]" key={`${matchIndex}-${matchEnd}`}>
         {text.slice(matchIndex, matchEnd)}
       </mark>
     );
@@ -362,26 +362,26 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
   }, [clips.length, isLoadingHistory]);
 
   return (
-    <main className="h-screen bg-transparent text-white antialiased" aria-label="CopClip clipboard popup">
-      <section className="box-border flex h-screen flex-col overflow-hidden border border-white/15 bg-[linear-gradient(180deg,rgba(21,26,32,0.96),rgba(17,22,27,0.95)),rgba(17,21,27,0.95)] shadow-[0_28px_80px_rgba(0,0,0,0.44),inset_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[28px] [backdrop-filter:blur(28px)_saturate(120%)]" aria-label="Clipboard popup">
+    <main className="h-screen bg-transparent text-[var(--popup-fg)] antialiased" aria-label="CopClip clipboard popup">
+      <section className="box-border flex h-screen flex-col overflow-hidden border border-[var(--popup-border)] [background:var(--popup-bg)] shadow-[var(--popup-shadow)] backdrop-blur-[28px] [backdrop-filter:blur(28px)_saturate(120%)]" aria-label="Clipboard popup">
           <div className={cx("grid shrink-0 grid-cols-[1fr_auto] gap-5 px-[19px] pb-2.5 pt-[18px]", drag)}>
             <div className="min-w-0">
-              <h1 className="m-0 text-[21px] font-bold leading-none text-white">History</h1>
-              <div className="mt-[7px] text-[13px] text-white/55">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</div>
+              <h1 className="m-0 text-[21px] font-bold leading-none text-[var(--popup-fg)]">History</h1>
+              <div className="mt-[7px] text-[13px] text-[var(--popup-muted)]">{appInfo ? `${appInfo.name} ${appInfo.version}` : statusText}</div>
             </div>
-            <div className="self-start rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-[7px] text-xs text-white/60">Local</div>
+            <div className="self-start rounded-full border border-[var(--popup-soft-border)] bg-[var(--popup-control)] px-2.5 py-[7px] text-xs text-[var(--popup-muted)]">Local</div>
           </div>
 
           <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-12 px-[19px] pb-4 pt-2.5 max-[760px]:grid-cols-1 max-[760px]:gap-2.5">
-            <label className={cx("grid h-10 grid-cols-[26px_1fr] items-center gap-1 rounded-[10px] border border-white/10 bg-black/35 px-[11px] shadow-[inset_0_1px_4px_rgba(0,0,0,0.2)]", noDrag)}>
-              <MagnifyingGlassIcon aria-hidden="true" className="text-white/60" size={18} />
+            <label className={cx("grid h-10 grid-cols-[26px_1fr] items-center gap-1 rounded-[10px] border border-[var(--popup-soft-border)] bg-[var(--popup-search-bg)] px-[11px] shadow-[inset_0_1px_4px_rgba(0,0,0,0.08)]", noDrag)}>
+              <MagnifyingGlassIcon aria-hidden="true" className="text-[var(--popup-muted)]" size={18} />
               <input
                 aria-label="Search clipboard history"
                 aria-activedescendant={activeOptionId}
                 aria-autocomplete="list"
                 aria-controls={resultsListId}
                 aria-expanded="true"
-                className="h-full min-w-0 border-0 bg-transparent text-[15px] text-white outline-none placeholder:text-white/45"
+                className="h-full min-w-0 border-0 bg-transparent text-[15px] text-[var(--popup-fg)] outline-none placeholder:text-[var(--popup-muted)]"
                 placeholder="Search history..."
                 ref={searchInputRef}
                 role="combobox"
@@ -390,7 +390,7 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
               />
             </label>
             <button
-              className={cx("inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] border border-white/10 bg-white/[0.065] px-[13px] text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 max-[760px]:justify-center", noDrag)}
+              className={cx("inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] border border-[var(--popup-soft-border)] bg-[var(--popup-control)] px-[13px] text-sm font-semibold text-[var(--popup-fg)] transition hover:-translate-y-px hover:bg-[var(--popup-control-hover)] disabled:cursor-not-allowed disabled:opacity-50 max-[760px]:justify-center", noDrag)}
               disabled={clips.length === 0}
               type="button"
               onClick={() => void applyPopupHistoryAction("clear")}
@@ -409,8 +409,8 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
                 <article
                   aria-selected={selected}
                   className={cx(
-                    "group grid min-h-[95px] grid-cols-[58px_minmax(0,1fr)_58px_auto] items-start gap-3.5 border-b border-white/[0.075] px-[15px] py-[15px] pl-3 transition last:border-b-0 hover:bg-white/[0.036] max-[760px]:grid-cols-[48px_minmax(0,1fr)]",
-                    selected && "bg-white/[0.055]"
+                    "group grid min-h-[95px] grid-cols-[58px_minmax(0,1fr)_58px_auto] items-start gap-3.5 border-b border-[var(--popup-soft-border)] px-[15px] py-[15px] pl-3 transition last:border-b-0 hover:bg-[var(--popup-row-hover)] max-[760px]:grid-cols-[48px_minmax(0,1fr)]",
+                    selected && "bg-[var(--popup-row-selected)]"
                   )}
                   id={`clipboard-history-option-${index}`}
                   key={clip.id}
@@ -430,9 +430,9 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
                   }}
                   role="option"
                 >
-                  <div className={cx("grid h-[58px] w-[52px] place-items-center content-center gap-1 rounded-[10px] border border-white/10 bg-white/[0.038] text-[11px]", typeboxClass(clip))}>
+                  <div className={cx("grid h-[58px] w-[52px] place-items-center content-center gap-1 rounded-[10px] border border-[var(--popup-soft-border)] bg-[var(--popup-icon-bg)] text-[11px]", typeboxClass(clip))}>
                     <Icon aria-hidden="true" size={23} weight="duotone" />
-                    <span className="text-[10px] text-white/70">{popupKindLabel(clip)}</span>
+                    <span className="text-[10px] text-[var(--popup-muted)]">{popupKindLabel(clip)}</span>
                   </div>
                   <button
                     aria-label={`Restore clipboard item ${index + 1}: ${clip.preview}`}
@@ -446,22 +446,22 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
                   >
                     {clip.type === "image" ? (
                       <div className="clip-image-preview grid grid-cols-[auto_1fr] items-center gap-3.5 max-[760px]:grid-cols-1">
-                        <img alt="" className="h-[70px] w-[102px] shrink-0 rounded-lg border border-white/20 bg-black/30 object-cover shadow-[inset_0_1px_rgba(255,255,255,0.18)] max-[760px]:w-[132px]" src={clip.imageDataUrl} />
+                        <img alt="" className="h-[70px] w-[102px] shrink-0 rounded-lg border border-[var(--popup-border)] bg-[var(--popup-image-bg)] object-cover shadow-[inset_0_1px_rgba(255,255,255,0.18)] max-[760px]:w-[132px]" src={clip.imageDataUrl} />
                         <div className="min-w-0">
-                          <h2 className="m-0 mb-2 truncate text-[15px] font-bold leading-tight text-white">{highlightSearchMatches(clipTitle(clip), query)}</h2>
+                          <h2 className="m-0 mb-2 truncate text-[15px] font-bold leading-tight text-[var(--popup-fg)]">{highlightSearchMatches(clipTitle(clip), query)}</h2>
                           {clip.pinned ? <span className="sr-only">Pinned</span> : null}
-                          <p className="m-0 text-sm leading-snug text-white/60">{highlightSearchMatches(clip.width && clip.height ? `${clip.width.toLocaleString()} × ${clip.height.toLocaleString()}` : clip.preview, query)}<br />PNG Image</p>
+                          <p className="m-0 text-sm leading-snug text-[var(--popup-muted)]">{highlightSearchMatches(clip.width && clip.height ? `${clip.width.toLocaleString()} × ${clip.height.toLocaleString()}` : clip.preview, query)}<br />PNG Image</p>
                         </div>
                       </div>
                     ) : (
                       <div className="min-w-0">
-                        <h2 className="m-0 mb-2 truncate text-[15px] font-bold leading-tight text-white">{highlightSearchMatches(clipTitle(clip), query)}</h2>
+                        <h2 className="m-0 mb-2 truncate text-[15px] font-bold leading-tight text-[var(--popup-fg)]">{highlightSearchMatches(clipTitle(clip), query)}</h2>
                         {clip.pinned ? <span className="sr-only">Pinned</span> : null}
-                        <p className="m-0 line-clamp-2 max-w-[460px] text-sm leading-[1.45] text-white/60">{highlightSearchMatches(clip.preview, query)}</p>
+                        <p className="m-0 line-clamp-2 max-w-[460px] text-sm leading-[1.45] text-[var(--popup-muted)]">{highlightSearchMatches(clip.preview, query)}</p>
                       </div>
                     )}
                   </button>
-                  <div className="pt-7 text-right text-[13px] tabular-nums text-white/55 max-[760px]:col-start-2 max-[760px]:pt-0 max-[760px]:text-left">{formatClipAge(clip.capturedAt)}</div>
+                  <div className="pt-7 text-right text-[13px] tabular-nums text-[var(--popup-muted)] max-[760px]:col-start-2 max-[760px]:pt-0 max-[760px]:text-left">{formatClipAge(clip.capturedAt)}</div>
                   <div className="max-[760px]:col-start-2">
                     <ClipActionButtons
                       item={clip}
@@ -474,16 +474,16 @@ export function ClipboardPopup({ settings }: { settings: CopClipSettings }) {
               );
             })}
             {clips.length === 0 ? (
-              <div className="m-[17px] rounded-xl border border-dashed border-white/15 p-11 text-center text-sm text-white/60" role="status">
+              <div className="m-[17px] rounded-xl border border-dashed border-[var(--popup-border)] p-11 text-center text-sm text-[var(--popup-muted)]" role="status">
                 {query ? "No clips match this search." : statusText === "Loading" ? "Loading history" : "Copy text, links, or images to start history"}
               </div>
             ) : null}
           </div>
 
-          <footer className="grid h-16 shrink-0 grid-cols-[1fr_auto] items-center px-[21px] text-sm text-white/60">
+          <footer className="grid h-16 shrink-0 grid-cols-[1fr_auto] items-center px-[21px] text-sm text-[var(--popup-muted)]">
             <span>{statusText}</span>
             <div className="flex items-center gap-[22px]">
-              <button className={cx("grid h-6 w-6 place-items-center bg-transparent text-white/60 transition hover:-translate-y-px hover:text-white", noDrag)} type="button" aria-label="Settings" onClick={() => void window.copclip?.openSettings()}>
+              <button className={cx("grid h-6 w-6 place-items-center bg-transparent text-[var(--popup-muted)] transition hover:-translate-y-px hover:text-[var(--popup-fg)]", noDrag)} type="button" aria-label="Settings" onClick={() => void window.copclip?.openSettings()}>
                 <GearSixIcon aria-hidden="true" size={16} />
               </button>
             </div>
