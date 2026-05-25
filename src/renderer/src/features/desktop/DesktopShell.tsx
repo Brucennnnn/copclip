@@ -120,10 +120,10 @@ export function DesktopShell({ settings }: { settings: CopClipSettings }) {
           </nav>
         </div>
 
-        <button className={cx("flex w-full cursor-not-allowed items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[15px] font-semibold", settingsText)} disabled type="button">
+        <a className={cx("flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[15px] font-semibold transition-colors hover:bg-[var(--settings-nav-hover)]", settingsText)} href="https://copclip-website.vercel.app/" rel="noreferrer" target="_blank">
           <QuestionIcon aria-hidden="true" className="h-[18px] w-[18px] rounded-full border-2 border-current p-0.5" weight="bold" />
           Help Center
-        </button>
+        </a>
       </aside>
 
       <section className={cx("h-screen min-w-0 overflow-y-auto px-6 pb-9 pt-6 [scrollbar-color:var(--settings-scrollbar)_transparent] [scrollbar-width:thin] max-[560px]:p-[18px]", settingsPanel)}>

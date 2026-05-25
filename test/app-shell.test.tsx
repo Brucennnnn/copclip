@@ -372,6 +372,7 @@ describe("CopClip app shell", () => {
     expect(screen.getByRole("button", { name: /Privacy/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Shortcuts/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Subscription/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Help Center" })).toHaveAttribute("href", "https://copclip-website.vercel.app/");
     expect(screen.queryByLabelText("Clipboard popup")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent Clips")).not.toBeInTheDocument();
     await waitFor(() => {
