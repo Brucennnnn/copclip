@@ -16,8 +16,6 @@
   <a href="#packaging">Packaging</a>
 </p>
 
-![CopClip clipboard history popup](image.png)
-
 ## Highlights
 
 - Fast clipboard history for text, links, HTML, and images.
